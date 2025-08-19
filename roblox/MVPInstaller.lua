@@ -81,6 +81,23 @@ return assets
 ]]
 ensureModuleScript("IgnisiaAssets", ASSETS_SOURCE)
 
+-- Simple GameConfig for tunables and positions
+local GAMECONFIG_SOURCE = [[
+local cfg = {}
+cfg.positions = {
+    zone2GateTeleport = Vector3.new(0,5,120),
+    zone2ShardPositions = { Vector3.new(10,3,132), Vector3.new(-8,3,136), Vector3.new(16,3,140) },
+    zone2BridgePos = Vector3.new(0,3,150),
+    solariPos = Vector3.new(0,3,120),
+}
+cfg.tuning = {
+    revealCooldown = 3.5,
+    patience = { nearRadius = 8, stillVel = 1.2, targetSeconds = 3.5 },
+}
+return cfg
+]]
+ensureModuleScript("GameConfig", GAMECONFIG_SOURCE)
+
 -- Spark part + prompt
 local spark = workspace:FindFirstChild("Spark")
 if not spark then
@@ -193,6 +210,7 @@ local ZONE2_SOURCE = [[
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
+local okCfg, GameConfig = pcall(function() return require(ReplicatedStorage:WaitForChild("GameConfig")) end)
 local Zone2 = workspace:FindFirstChild("Zone2") or Instance.new("Folder")
 Zone2.Name = "Zone2" Zone2.Parent = workspace
 
@@ -201,7 +219,7 @@ revealEvent.Name = "RevealEvent"
 local dialogEvent = ReplicatedStorage:FindFirstChild("DialogEvent") or Instance.new("RemoteEvent", ReplicatedStorage)
 dialogEvent.Name = "DialogEvent"
 
-local revealCooldowns = {} local REVEAL_COOLDOWN = 3.0
+local revealCooldowns = {} local REVEAL_COOLDOWN = (okCfg and GameConfig.tuning and GameConfig.tuning.revealCooldown) or 3.0
 revealEvent.OnServerEvent:Connect(function(player)
     if not player then return end
     local now = tick() local last = revealCooldowns[player.UserId] or -100
@@ -209,7 +227,7 @@ revealEvent.OnServerEvent:Connect(function(player)
     revealCooldowns[player.UserId] = now
 end)
 
-local ShardPositions = { Vector3.new(10,3,132), Vector3.new(-8,3,136), Vector3.new(16,3,140) }
+local ShardPositions = (okCfg and GameConfig.positions and GameConfig.positions.zone2ShardPositions) or { Vector3.new(10,3,132), Vector3.new(-8,3,136), Vector3.new(16,3,140) }
 
 local function onShardTouched(shard)
     shard.Touched:Connect(function(hit)
@@ -226,7 +244,8 @@ local function onShardTouched(shard)
         -- persist
         pcall(function() local SS = require(game:GetService("ServerScriptService"):FindFirstChild("SaveService")) if SS and SS.SavePlayer then SS:SavePlayer(pl) end end)
         if prog.Value >= #ShardPositions and not Zone2:FindFirstChild("LightBridge") then
-            local bridge = Instance.new("Part") bridge.Name = "LightBridge" bridge.Size = Vector3.new(12,1,4) bridge.Position = Vector3.new(0,3,150) bridge.Anchored = true bridge.BrickColor = BrickColor.new("Institutional white") bridge.Parent = Zone2
+            local pos = (okCfg and GameConfig.positions and GameConfig.positions.zone2BridgePos) or Vector3.new(0,3,150)
+            local bridge = Instance.new("Part") bridge.Name = "LightBridge" bridge.Size = Vector3.new(12,1,4) bridge.Position = pos bridge.Anchored = true bridge.BrickColor = BrickColor.new("Institutional white") bridge.Parent = Zone2
         end
     end)
 end
@@ -261,7 +280,7 @@ for i,cf in ipairs(positions) do
 end
 
 -- Solari NPC
-local sol = Instance.new("Part") sol.Name = "SolariNPC" sol.Size = Vector3.new(2,5,2) sol.Position = Vector3.new(0,3,120) sol.Anchored = true sol.BrickColor = BrickColor.new("Bright orange") sol.Parent = Zone2
+local sol = Instance.new("Part") sol.Name = "SolariNPC" sol.Size = Vector3.new(2,5,2) sol.Position = ((okCfg and GameConfig.positions and GameConfig.positions.solariPos) or Vector3.new(0,3,120)) sol.Anchored = true sol.BrickColor = BrickColor.new("Bright orange") sol.Parent = Zone2
 local sp = Instance.new("ProximityPrompt") sp.ActionText = "Talk" sp.ObjectText = "Solari" sp.HoldDuration = 0.3 sp.MaxActivationDistance = 10 sp.Parent = sol
 sp.Triggered:Connect(function(player)
     local refl = "" local rv = player:FindFirstChild("ReflectionChoice") if rv and rv.Value then refl = tostring(rv.Value) end
@@ -283,12 +302,14 @@ if not part or not part:IsA("BasePart") then
     part = workspace:FindFirstChild("Zone2Gate") or Instance.new("Part", workspace)
     part.Name = "Zone2Gate" part.Size = Vector3.new(8,3,1) part.Position = Vector3.new(0,3,40) part.Anchored = true
 end
+local okCfg, GameConfig = pcall(function() return require(game:GetService("ReplicatedStorage"):WaitForChild("GameConfig")) end)
+local tp = (okCfg and GameConfig.positions and GameConfig.positions.zone2GateTeleport) or TELEPORT_POS
 local Players = game:GetService("Players")
 local proximity = part:FindFirstChildOfClass("ProximityPrompt") or Instance.new("ProximityPrompt", part)
 proximity.ActionText = "Enter Lensveil" proximity.ObjectText = "Zone Gate" proximity.HoldDuration = 0.5 proximity.MaxActivationDistance = 8
 proximity.Triggered:Connect(function(player)
     if player:FindFirstChild("HasSpark") and player.HasSpark.Value == true then
-        local char = player.Character if char and char:FindFirstChild("HumanoidRootPart") then char:SetPrimaryPartCFrame(CFrame.new(TELEPORT_POS)) end
+        local char = player.Character if char and char:FindFirstChild("HumanoidRootPart") then char:SetPrimaryPartCFrame(CFrame.new(tp)) end
     else
         local plgui = player:FindFirstChild("PlayerGui") if plgui then local msg = Instance.new("Message", plgui) msg.Text = "You need the First Flame to enter." task.delay(2, function() pcall(function() msg:Destroy() end) end) end
     end
@@ -306,6 +327,7 @@ local UserInputService = game:GetService("UserInputService")
 local CollectionService = game:GetService("CollectionService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
+local okCfg, GameConfig = pcall(function() return require(ReplicatedStorage:WaitForChild("GameConfig")) end)
 local sparkEvent = ReplicatedStorage:FindFirstChild("SparkEvent") or Instance.new("RemoteEvent", ReplicatedStorage) sparkEvent.Name = "SparkEvent"
 local effectEvent = ReplicatedStorage:FindFirstChild("IgnisiaEffectEvent") or Instance.new("RemoteEvent", ReplicatedStorage) effectEvent.Name = "IgnisiaEffectEvent"
 local revealEvent = ReplicatedStorage:FindFirstChild("RevealEvent") or Instance.new("RemoteEvent", ReplicatedStorage) revealEvent.Name = "RevealEvent"
@@ -314,9 +336,9 @@ local dialogEvent = ReplicatedStorage:FindFirstChild("DialogEvent") or Instance.
 local assets = {}
 do local mod = ReplicatedStorage:FindFirstChild("IgnisiaAssets") if mod and mod:IsA("ModuleScript") then local ok, m = pcall(require, mod) if ok and type(m) == "table" then assets = m end end end
 assets.tuning = assets.tuning or {}
-local NEAR_RADIUS = assets.tuning.NEAR_RADIUS or 8
-local STILL_VEL_THRESHOLD = assets.tuning.STILL_VEL_THRESHOLD or 1.2
-local TARGET_SECONDS = assets.tuning.TARGET_SECONDS or 3.5
+local NEAR_RADIUS = (okCfg and GameConfig.tuning and GameConfig.tuning.patience and GameConfig.tuning.patience.nearRadius) or assets.tuning.NEAR_RADIUS or 8
+local STILL_VEL_THRESHOLD = (okCfg and GameConfig.tuning and GameConfig.tuning.patience and GameConfig.tuning.patience.stillVel) or assets.tuning.STILL_VEL_THRESHOLD or 1.2
+local TARGET_SECONDS = (okCfg and GameConfig.tuning and GameConfig.tuning.patience and GameConfig.tuning.patience.targetSeconds) or assets.tuning.TARGET_SECONDS or 3.5
 
 -- GUI
 local gui = playerGui:FindFirstChild("IgnisiaUI")
@@ -434,7 +456,22 @@ local function pulseReveal()
 end
 UserInputService.InputBegan:Connect(function(input, processed) if processed then return end if input.KeyCode == Enum.KeyCode.R then pulseReveal() end end)
 local rb = gui:FindFirstChild("RevealButton") or Instance.new("TextButton")
-rb.Name = "RevealButton" rb.Size = UDim2.new(0,140,0,44) rb.Position = UDim2.new(0.02,0,0.82,0) rb.Text = "Reveal" rb.TextScaled = true rb.BackgroundColor3 = Color3.fromRGB(40,20,10) rb.TextColor3 = Color3.new(1,1,1) rb.Parent = gui
+rb.Name = "RevealButton"
+rb.Size = UDim2.new(0,140,0,44)
+rb.Position = UDim2.new(0.02,0,0.82,0)
+rb.AnchorPoint = Vector2.new(0,0)
+rb.Text = "Reveal"
+rb.TextScaled = true
+rb.BackgroundColor3 = Color3.fromRGB(40,20,10)
+rb.TextColor3 = Color3.new(1,1,1)
+rb.Parent = gui
+-- Simple mobile-friendly adjustment
+pcall(function()
+    if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+        rb.Size = UDim2.new(0,170,0,56)
+        rb.Position = UDim2.new(0.03,0,0.82,0)
+    end
+end)
 rb.MouseButton1Click:Connect(pulseReveal)
 
 -- Dialog listener
