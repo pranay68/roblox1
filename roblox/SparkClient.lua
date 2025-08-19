@@ -32,6 +32,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 local sparkEvent = ReplicatedStorage:FindFirstChild("SparkEvent")
 local effectEvent = ReplicatedStorage:FindFirstChild("IgnisiaEffectEvent")
 local revealEvent = ReplicatedStorage:FindFirstChild("RevealEvent")
+local dialogEvent = ReplicatedStorage:FindFirstChild("DialogEvent")
 if not sparkEvent then
     sparkEvent = Instance.new("RemoteEvent")
     sparkEvent.Name = "SparkEvent"
@@ -46,6 +47,11 @@ if not revealEvent then
     revealEvent = Instance.new("RemoteEvent")
     revealEvent.Name = "RevealEvent"
     revealEvent.Parent = ReplicatedStorage
+end
+if not dialogEvent then
+    dialogEvent = Instance.new("RemoteEvent")
+    dialogEvent.Name = "DialogEvent"
+    dialogEvent.Parent = ReplicatedStorage
 end
 
 -- Auto-create simple GUI if not present
@@ -240,6 +246,36 @@ UserInputService.InputBegan:Connect(function(input, processed)
     if input.KeyCode == Enum.KeyCode.R then
         pulseReveal()
     end
+end)
+
+-- Dialog listener (e.g., Solari NPC)
+dialogEvent.OnClientEvent:Connect(function(data)
+    if not data then return end
+    local lines = data.lines or {}
+    local speaker = data.speaker or ""
+    if #lines == 0 then return end
+    -- optional portrait
+    local portraitImg = nil
+    pcall(function()
+        local a = ReplicatedStorage:FindFirstChild("IgnisiaAssets")
+        if a then
+            local ok, m = pcall(require, a)
+            if ok and type(m) == "table" and m.npcDecals and m.npcDecals[speaker] and m.npcDecals[speaker] ~= "" then
+                portraitImg = m.npcDecals[speaker]
+            end
+        end
+    end)
+    if portraitImg and portrait then
+        portrait.Image = portraitImg
+        portrait.Visible = true
+    end
+    for _,text in ipairs(lines) do
+        dialogLabel.Text = (speaker ~= "" and (speaker..": ") or "") .. tostring(text)
+        dialogLabel.Visible = true
+        wait(2.2)
+    end
+    dialogLabel.Visible = false
+    if portrait then portrait.Visible = false end
 end)
 
 local function playCinematicOnce()

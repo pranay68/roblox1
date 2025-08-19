@@ -15,6 +15,7 @@ pcall(function()
 end)
 
 local failureCounts = {}
+local pendingWrites = {}
 
 local function getKey(userId)
     return SAVE_KEY_PREFIX .. tostring(userId)
@@ -78,12 +79,15 @@ local function savePlayerData(player)
     if shards and type(shards.Value) == "number" and shards.Value > 0 then
         payload.Zone2Shards = shards.Value
     end
+    local mirror = player:FindFirstChild("MirrorSolved")
+    if mirror and mirror.Value == true then
+        payload.MirrorSolved = true
+    end
     -- Queue saves to avoid bursty writes: add to pending and let flush loop handle retries
     pendingWrites[key] = payload
 end
 
 -- pending write queue and flush loop
-local pendingWrites = {}
 local FLUSH_INTERVAL = 4 -- seconds
 local function flushPendingWrites()
     for key, payload in pairs(pendingWrites) do
@@ -123,6 +127,12 @@ Players.PlayerAdded:Connect(function(player)
             end
             if data.ReflectionChoice then
                 local s = Instance.new("StringValue") s.Name = "ReflectionChoice" s.Value = tostring(data.ReflectionChoice) s.Parent = player
+            end
+            if data.Zone2Shards and tonumber(data.Zone2Shards) then
+                local iv = Instance.new("IntValue") iv.Name = "Zone2Shards" iv.Value = tonumber(data.Zone2Shards) or 0 iv.Parent = player
+            end
+            if data.MirrorSolved then
+                local bv = Instance.new("BoolValue") bv.Name = "MirrorSolved" bv.Value = true bv.Parent = player
             end
         end
     end)

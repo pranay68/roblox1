@@ -15,6 +15,10 @@ local revealEvent = ReplicatedStorage:FindFirstChild("RevealEvent")
 if not revealEvent then
     revealEvent = Instance.new("RemoteEvent") revealEvent.Name = "RevealEvent" revealEvent.Parent = ReplicatedStorage
 end
+local dialogEvent = ReplicatedStorage:FindFirstChild("DialogEvent")
+if not dialogEvent then
+    dialogEvent = Instance.new("RemoteEvent") dialogEvent.Name = "DialogEvent" dialogEvent.Parent = ReplicatedStorage
+end
 
 -- Shard spawn positions (tweak in Studio)
 local ShardPositions = {
@@ -39,9 +43,22 @@ end
 spawnShards()
 
 -- server-side respond to reveal usage (we can extend validation here)
+local revealCooldowns = {}
+local REVEAL_COOLDOWN = 3.0
+
 revealEvent.OnServerEvent:Connect(function(player)
     -- validation and metrics
     if not player or not player:IsA("Player") then return end
+    local now = tick()
+    local last = revealCooldowns[player.UserId] or -100
+    if (now - last) < REVEAL_COOLDOWN then
+        pcall(function()
+            local Metrics = require(game:GetService("ServerScriptService"):FindFirstChild("Metrics"))
+            Metrics:Increment("reveal_rate_limited")
+        end)
+        return
+    end
+    revealCooldowns[player.UserId] = now
     pcall(function()
         local Metrics = require(game:GetService("ServerScriptService"):FindFirstChild("Metrics"))
         Metrics:Increment("reveal_used")
@@ -62,6 +79,11 @@ local function onShardTouched(shard)
             local prog = pl:FindFirstChild("Zone2Shards")
             if not prog then prog = Instance.new("IntValue") prog.Name = "Zone2Shards" prog.Value = 0 prog.Parent = pl end
             prog.Value = prog.Value + 1
+            -- persist
+            pcall(function()
+                local SaveService = require(game:GetService("ServerScriptService"):FindFirstChild("SaveService"))
+                if SaveService and SaveService.SavePlayer then SaveService:SavePlayer(pl) end
+            end)
             pcall(function() shard:Destroy() end)
             -- if collected all shards, spawn bridge
             if prog.Value >= #ShardPositions then
@@ -128,9 +150,7 @@ local function ensureMirrorGrove()
         mirror.Parent = grove
 
         -- tag illusions so reveal glow can hint which is real: add tag only to real mirror frame
-        if i == realIndex then
-            pcall(function() CollectionService:AddTag(mirror, "IllusionHint") end)
-        end
+        if i == realIndex then pcall(function() CollectionService:AddTag(mirror, "IllusionHint") end) end
 
         local prompt = Instance.new("ProximityPrompt")
         prompt.ActionText = "Inspect"
@@ -149,6 +169,10 @@ local function ensureMirrorGrove()
                     flag.Name = "MirrorSolved"
                     flag.Value = true
                     flag.Parent = player
+                    pcall(function()
+                        local SaveService = require(game:GetService("ServerScriptService"):FindFirstChild("SaveService"))
+                        if SaveService and SaveService.SavePlayer then SaveService:SavePlayer(player) end
+                    end)
                     local char = player.Character
                     if char then
                         local h = char:FindFirstChildOfClass("Humanoid")
@@ -176,5 +200,47 @@ end
 
 ensureIllusions()
 ensureMirrorGrove()
+
+-- Solari NPC hub
+local function ensureSolari()
+    if Zone2:FindFirstChild("SolariNPC") then return end
+    local sol = Instance.new("Part")
+    sol.Name = "SolariNPC"
+    sol.Size = Vector3.new(2,5,2)
+    sol.Position = Vector3.new(0, 3, 120)
+    sol.Anchored = true
+    sol.BrickColor = BrickColor.new("Bright orange")
+    sol.Parent = Zone2
+
+    local prompt = Instance.new("ProximityPrompt")
+    prompt.ActionText = "Talk"
+    prompt.ObjectText = "Solari"
+    prompt.HoldDuration = 0.3
+    prompt.MaxActivationDistance = 10
+    prompt.Parent = sol
+
+    prompt.Triggered:Connect(function(player)
+        if not player or not player:IsA("Player") then return end
+        local refl = ""
+        local rv = player:FindFirstChild("ReflectionChoice")
+        if rv and rv.Value then refl = tostring(rv.Value) end
+        local greeting = "Welcome to Lensveil. Your inner light will reveal what is hidden."
+        if string.find(refl, "🔥") then
+            greeting = "Your fire runs strong. Use it to see through illusions."
+        elseif string.find(refl, "🌱") then
+            greeting = "Gentle growth still shines. Let it guide your path."
+        elseif string.find(refl, "🧡") then
+            greeting = "That warmth you felt? Hold onto it. It shows the way."
+        end
+        local lines = {
+            greeting,
+            "Collect three Light Shards to form the lightbridge ahead.",
+            "Press R or tap Reveal to glimpse the unseen."
+        }
+        pcall(function() dialogEvent:FireClient(player, {speaker = "Solari", lines = lines}) end)
+    end)
+end
+
+ensureSolari()
 
 
