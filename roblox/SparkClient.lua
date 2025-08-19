@@ -5,6 +5,8 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local CollectionService = game:GetService("CollectionService")
 
 -- try to load assets from ReplicatedStorage (optional)
 local assets = {}
@@ -29,6 +31,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 -- Ensure remote exists
 local sparkEvent = ReplicatedStorage:FindFirstChild("SparkEvent")
 local effectEvent = ReplicatedStorage:FindFirstChild("IgnisiaEffectEvent")
+local revealEvent = ReplicatedStorage:FindFirstChild("RevealEvent")
 if not sparkEvent then
     sparkEvent = Instance.new("RemoteEvent")
     sparkEvent.Name = "SparkEvent"
@@ -38,6 +41,11 @@ if not effectEvent then
     effectEvent = Instance.new("RemoteEvent")
     effectEvent.Name = "IgnisiaEffectEvent"
     effectEvent.Parent = ReplicatedStorage
+end
+if not revealEvent then
+    revealEvent = Instance.new("RemoteEvent")
+    revealEvent.Name = "RevealEvent"
+    revealEvent.Parent = ReplicatedStorage
 end
 
 -- Auto-create simple GUI if not present
@@ -167,6 +175,72 @@ local npcLines = {
     {name="Emerson", text="... (shows a glowing drawing of a flame)"},
     {name="Donna", text="Sparks show when you're ready."},
 }
+
+-- Reveal ability (client): press R to toggle a reveal pulse that shows illusions briefly
+local REVEAL_COOLDOWN = 3.5
+local lastRevealTime = -100
+
+local function pulseReveal()
+    local now = tick()
+    if now - lastRevealTime < REVEAL_COOLDOWN then return end
+    lastRevealTime = now
+    -- tell server for validation/metrics
+    pcall(function() revealEvent:FireServer() end)
+
+    -- client-side effect: temporarily show tagged illusions and hint mirrors
+    local duration = 1.25
+    local endTime = now + duration
+
+    -- Camera bloom pulse
+    local lighting = game:GetService("Lighting")
+    local bloom = lighting:FindFirstChild("IgnisiaRevealBloom")
+    if not bloom then
+        bloom = Instance.new("BloomEffect")
+        bloom.Name = "IgnisiaRevealBloom"
+        bloom.Threshold = 1
+        bloom.Intensity = 0.1
+        bloom.Size = 24
+        bloom.Parent = lighting
+    end
+    TweenService:Create(bloom, TweenInfo.new(0.15, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Intensity = 1.1, Size = 56}):Play()
+    delay(duration, function()
+        TweenService:Create(bloom, TweenInfo.new(0.4, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Intensity = 0.1, Size = 24}):Play()
+    end)
+
+    -- temporarily make illusions visible
+    local function highlightInstance(inst)
+        if inst:IsA("BasePart") then
+            local original = inst.LocalTransparencyModifier
+            inst.LocalTransparencyModifier = 0.2
+            -- add a selection box for stronger hint
+            local sel = Instance.new("SelectionBox")
+            sel.LineThickness = 0.03
+            sel.Color3 = Color3.fromRGB(255, 220, 140)
+            sel.Adornee = inst
+            sel.Parent = inst
+            delay(duration, function()
+                pcall(function()
+                    inst.LocalTransparencyModifier = original
+                end)
+                pcall(function() sel:Destroy() end)
+            end)
+        end
+    end
+
+    for _,inst in ipairs(CollectionService:GetTagged("Illusion")) do
+        highlightInstance(inst)
+    end
+    for _,inst in ipairs(CollectionService:GetTagged("IllusionHint")) do
+        highlightInstance(inst)
+    end
+end
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.KeyCode == Enum.KeyCode.R then
+        pulseReveal()
+    end
+end)
 
 local function playCinematicOnce()
     local camera = workspace.CurrentCamera

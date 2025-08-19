@@ -43,6 +43,12 @@ Tuning
 - `NEAR_RADIUS`, `STILL_VEL_THRESHOLD`, and `TARGET_SECONDS` in the client script control how patient the player must be.
 - Particle/sound intensities and rates are exposed in `asset_ids.lua` and the client script.
 
+Zone 2 (Lensveil) quick start
+- Place `Zone2Content.lua` and `Zone2Quest.lua` in `Workspace` (they will create a `Zone2` folder automatically).
+- Press R in play to pulse the Reveal ability. Illusion-tagged parts and the hint mirror will glow briefly.
+- Collect 3 Light Shards to spawn the LightBridge.
+- Inspect mirrors in the grove; the correct mirror grants a small heal and marks completion.
+
 Notes
 - These files are plain Lua text for you to paste into Roblox Studio. Roblox's runtime does not directly read files from your filesystem; you must copy the contents into Script/LocalScript instances in the Explorer.
 - If you'd like, I can also produce a Studio plugin script that creates all instances automatically — tell me and I'll add it.

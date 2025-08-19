@@ -3,6 +3,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CollectionService = game:GetService("CollectionService")
 
 local Zone2 = workspace:FindFirstChild("Zone2")
 if not Zone2 then
@@ -77,5 +78,103 @@ for _,p in ipairs(Zone2:GetChildren()) do
         onShardTouched(p)
     end
 end
+
+-- Illusions and Mirror Grove (simple implementation)
+-- We spawn a few invisible path pieces and add a Mirror puzzle with one correct mirror.
+
+local function createIllusion(name, size, cframe)
+    local part = Instance.new("Part")
+    part.Name = name
+    part.Size = size
+    part.CFrame = cframe
+    part.Anchored = true
+    part.CanCollide = false
+    part.Transparency = 1 -- invisible by default; client reveal can show via LocalTransparencyModifier
+    part.Color = Color3.fromRGB(255, 255, 255)
+    part.Parent = Zone2
+    pcall(function() CollectionService:AddTag(part, "Illusion") end)
+    return part
+end
+
+local function ensureIllusions()
+    if Zone2:FindFirstChild("IllusionPath1") then return end
+    createIllusion("IllusionPath1", Vector3.new(4,1,16), CFrame.new(4, 3, 146))
+    createIllusion("IllusionPath2", Vector3.new(4,1,16), CFrame.new(-4, 3, 146))
+    createIllusion("IllusionStep", Vector3.new(2,1,2), CFrame.new(0, 4, 142))
+end
+
+local function ensureMirrorGrove()
+    local grove = Zone2:FindFirstChild("MirrorGrove")
+    if grove then return end
+    grove = Instance.new("Folder")
+    grove.Name = "MirrorGrove"
+    grove.Parent = Zone2
+
+    local positions = {
+        CFrame.new(-12, 3, 126),
+        CFrame.new(-8, 3, 126),
+        CFrame.new(-4, 3, 126),
+        CFrame.new(0, 3, 126),
+    }
+    local realIndex = 3 -- choose the third mirror as the real one
+    for i,cf in ipairs(positions) do
+        local mirror = Instance.new("Part")
+        mirror.Name = "Mirror"..tostring(i)
+        mirror.Size = Vector3.new(3,5,1)
+        mirror.CFrame = cf
+        mirror.Anchored = true
+        mirror.BrickColor = BrickColor.new("Really black")
+        mirror.Reflectance = 0.4
+        mirror.Parent = grove
+
+        -- tag illusions so reveal glow can hint which is real: add tag only to real mirror frame
+        if i == realIndex then
+            pcall(function() CollectionService:AddTag(mirror, "IllusionHint") end)
+        end
+
+        local prompt = Instance.new("ProximityPrompt")
+        prompt.ActionText = "Inspect"
+        prompt.ObjectText = "Mirror"
+        prompt.HoldDuration = 0.4
+        prompt.MaxActivationDistance = 8
+        prompt.Parent = mirror
+
+        prompt.Triggered:Connect(function(player)
+            if not player or not player:IsA("Player") then return end
+            if i == realIndex then
+                -- reward small heal + message once; mark completion on player
+                local flag = player:FindFirstChild("MirrorSolved")
+                if not flag then
+                    flag = Instance.new("BoolValue")
+                    flag.Name = "MirrorSolved"
+                    flag.Value = true
+                    flag.Parent = player
+                    local char = player.Character
+                    if char then
+                        local h = char:FindFirstChildOfClass("Humanoid")
+                        if h then h.Health = math.min(h.MaxHealth, h.Health + 15) end
+                    end
+                    -- optional: increment metrics
+                    pcall(function()
+                        local Metrics = require(game:GetService("ServerScriptService"):FindFirstChild("Metrics"))
+                        Metrics:Increment("mirror_solved")
+                    end)
+                end
+            else
+                -- incorrect mirror: soft feedback via message
+                local plgui = player:FindFirstChild("PlayerGui")
+                if plgui then
+                    local msg = Instance.new("Message")
+                    msg.Text = "It looks real… but something feels off."
+                    msg.Parent = plgui
+                    delay(1.5, function() pcall(function() msg:Destroy() end) end)
+                end
+            end
+        end)
+    end
+end
+
+ensureIllusions()
+ensureMirrorGrove()
 
 
