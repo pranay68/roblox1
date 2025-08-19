@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="g1" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#FF8C50"/>
+      <stop offset="100%" stop-color="#FFD090"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#FF7040"/>
+      <stop offset="100%" stop-color="#FFB070"/>
+    </linearGradient>
+    <linearGradient id="g3" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#8CD88C"/>
+      <stop offset="100%" stop-color="#CFF5CF"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Button 1 (warm) -->
+  <rect x="32" y="32" rx="28" ry="28" width="448" height="128" fill="url(#g1)" stroke="#00000022" stroke-width="2"/>
+  <text x="256" y="110" font-family="Verdana" font-size="42" fill="#2b1b10" text-anchor="middle">🧡 Like</text>
+
+  <!-- Button 2 (fire) -->
+  <rect x="32" y="192" rx="28" ry="28" width="448" height="128" fill="url(#g2)" stroke="#00000022" stroke-width="2"/>
+  <text x="256" y="270" font-family="Verdana" font-size="42" fill="#2b0f0f" text-anchor="middle">🔥 Brave</text>
+
+  <!-- Button 3 (growth) -->
+  <rect x="32" y="352" rx="28" ry="28" width="448" height="128" fill="url(#g3)" stroke="#00000022" stroke-width="2"/>
+  <text x="256" y="430" font-family="Verdana" font-size="42" fill="#0f2b12" text-anchor="middle">🌱 Grow</text>
+
+</svg>
+
+
+
+
+
+
+
