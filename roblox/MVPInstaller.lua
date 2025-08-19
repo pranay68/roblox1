@@ -86,13 +86,20 @@ local GAMECONFIG_SOURCE = [[
 local cfg = {}
 cfg.positions = {
     zone2GateTeleport = Vector3.new(0,5,120),
-    zone2ShardPositions = { Vector3.new(10,3,132), Vector3.new(-8,3,136), Vector3.new(16,3,140) },
-    zone2BridgePos = Vector3.new(0,3,150),
-    solariPos = Vector3.new(0,3,120),
+    -- If shard positions are nil, they will be auto-placed around the teleport anchor
+    zone2ShardPositions = nil,
+    zone2BridgePos = nil, -- if nil, placed ahead of teleport anchor
+    solariPos = nil,      -- if nil, placed near teleport anchor
 }
 cfg.tuning = {
     revealCooldown = 3.5,
     patience = { nearRadius = 8, stillVel = 1.2, targetSeconds = 3.5 },
+}
+-- Optional asset overrides so you can swap placeholders without code edits
+cfg.assets = {
+    vignetteImage = "", -- e.g., "rbxassetid://YOUR_VIGNETTE_ID"
+    reflectionButtonIcons = {"", "", ""},
+    npcDecals = { Solari = "" },
 }
 return cfg
 ]]
@@ -227,7 +234,22 @@ revealEvent.OnServerEvent:Connect(function(player)
     revealCooldowns[player.UserId] = now
 end)
 
-local ShardPositions = (okCfg and GameConfig.positions and GameConfig.positions.zone2ShardPositions) or { Vector3.new(10,3,132), Vector3.new(-8,3,136), Vector3.new(16,3,140) }
+local function groundAt(pos)
+    local ray = Ray.new(pos + Vector3.new(0,50,0), Vector3.new(0,-200,0))
+    local part, hit = workspace:FindPartOnRay(ray)
+    if hit then return Vector3.new(pos.X, hit.Y + 1.5, pos.Z) end
+    return pos
+end
+
+local anchor = (okCfg and GameConfig.positions and GameConfig.positions.zone2GateTeleport) or Vector3.new(0,5,120)
+local ShardPositions = (okCfg and GameConfig.positions and GameConfig.positions.zone2ShardPositions)
+if not ShardPositions then
+    ShardPositions = {
+        groundAt(anchor + Vector3.new(10,0,12)),
+        groundAt(anchor + Vector3.new(-8,0,16)),
+        groundAt(anchor + Vector3.new(14,0,18)),
+    }
+end
 
 local function onShardTouched(shard)
     shard.Touched:Connect(function(hit)
@@ -244,7 +266,8 @@ local function onShardTouched(shard)
         -- persist
         pcall(function() local SS = require(game:GetService("ServerScriptService"):FindFirstChild("SaveService")) if SS and SS.SavePlayer then SS:SavePlayer(pl) end end)
         if prog.Value >= #ShardPositions and not Zone2:FindFirstChild("LightBridge") then
-            local pos = (okCfg and GameConfig.positions and GameConfig.positions.zone2BridgePos) or Vector3.new(0,3,150)
+            local defaultPos = anchor + Vector3.new(0,0,30)
+            local pos = (okCfg and GameConfig.positions and GameConfig.positions.zone2BridgePos) or groundAt(defaultPos)
             local bridge = Instance.new("Part") bridge.Name = "LightBridge" bridge.Size = Vector3.new(12,1,4) bridge.Position = pos bridge.Anchored = true bridge.BrickColor = BrickColor.new("Institutional white") bridge.Parent = Zone2
         end
     end)
@@ -280,7 +303,8 @@ for i,cf in ipairs(positions) do
 end
 
 -- Solari NPC
-local sol = Instance.new("Part") sol.Name = "SolariNPC" sol.Size = Vector3.new(2,5,2) sol.Position = ((okCfg and GameConfig.positions and GameConfig.positions.solariPos) or Vector3.new(0,3,120)) sol.Anchored = true sol.BrickColor = BrickColor.new("Bright orange") sol.Parent = Zone2
+local defaultSol = groundAt(anchor + Vector3.new(6,0,4))
+local sol = Instance.new("Part") sol.Name = "SolariNPC" sol.Size = Vector3.new(2,5,2) sol.Position = ((okCfg and GameConfig.positions and GameConfig.positions.solariPos) or defaultSol) sol.Anchored = true sol.BrickColor = BrickColor.new("Bright orange") sol.Parent = Zone2
 local sp = Instance.new("ProximityPrompt") sp.ActionText = "Talk" sp.ObjectText = "Solari" sp.HoldDuration = 0.3 sp.MaxActivationDistance = 10 sp.Parent = sol
 sp.Triggered:Connect(function(player)
     local refl = "" local rv = player:FindFirstChild("ReflectionChoice") if rv and rv.Value then refl = tostring(rv.Value) end
@@ -335,6 +359,16 @@ local dialogEvent = ReplicatedStorage:FindFirstChild("DialogEvent") or Instance.
 
 local assets = {}
 do local mod = ReplicatedStorage:FindFirstChild("IgnisiaAssets") if mod and mod:IsA("ModuleScript") then local ok, m = pcall(require, mod) if ok and type(m) == "table" then assets = m end end end
+-- merge asset overrides from GameConfig if present
+pcall(function()
+    if okCfg and GameConfig.assets then
+        assets.ui = assets.ui or {}
+        if GameConfig.assets.vignetteImage and GameConfig.assets.vignetteImage ~= "" then assets.ui.vignetteImage = GameConfig.assets.vignetteImage end
+        if GameConfig.assets.reflectionButtonIcons then assets.ui.reflectionButtonIcons = GameConfig.assets.reflectionButtonIcons end
+        assets.npcDecals = assets.npcDecals or {}
+        if GameConfig.assets.npcDecals then for k,v in pairs(GameConfig.assets.npcDecals) do assets.npcDecals[k] = v end end
+    end
+end)
 assets.tuning = assets.tuning or {}
 local NEAR_RADIUS = (okCfg and GameConfig.tuning and GameConfig.tuning.patience and GameConfig.tuning.patience.nearRadius) or assets.tuning.NEAR_RADIUS or 8
 local STILL_VEL_THRESHOLD = (okCfg and GameConfig.tuning and GameConfig.tuning.patience and GameConfig.tuning.patience.stillVel) or assets.tuning.STILL_VEL_THRESHOLD or 1.2
@@ -473,6 +507,16 @@ pcall(function()
     end
 end)
 rb.MouseButton1Click:Connect(pulseReveal)
+
+-- Reflection button mobile scaling
+pcall(function()
+    if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+        for _,btnName in ipairs({"Choice1","Choice2","Choice3"}) do
+            local b = reflection:FindFirstChild(btnName)
+            if b then b.TextScaled = true end
+        end
+    end
+end)
 
 -- Dialog listener
 dialogEvent.OnClientEvent:Connect(function(data)
