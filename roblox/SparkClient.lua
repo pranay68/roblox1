@@ -213,6 +213,34 @@ local function pulseReveal()
         TweenService:Create(bloom, TweenInfo.new(0.4, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Intensity = 0.1, Size = 24}):Play()
     end)
 
+    -- vignette flash if present
+    local vign = nil
+    pcall(function()
+        vign = gui and gui:FindFirstChild("IgnisiaVignette")
+    end)
+    if vign then
+        pcall(function()
+            vign.ImageTransparency = 1
+        end)
+        TweenService:Create(vign, TweenInfo.new(0.12, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {ImageTransparency = 0.25}):Play()
+        delay(duration, function()
+            TweenService:Create(vign, TweenInfo.new(0.35, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {ImageTransparency = 1}):Play()
+        end)
+    end
+
+    -- soft shimmer sound
+    pcall(function()
+        local sid = assets.sounds and assets.sounds.chime or ""
+        if sid and sid ~= "" then
+            local s = Instance.new("Sound")
+            s.SoundId = sid
+            s.Volume = 0.4
+            s.Parent = workspace
+            s:Play()
+            game:GetService("Debris"):AddItem(s, 3)
+        end
+    end)
+
     -- temporarily make illusions visible
     local function highlightInstance(inst)
         if inst:IsA("BasePart") then
@@ -371,23 +399,7 @@ local function createRevealButton()
     revealButton.Parent = gui
 
     revealButton.MouseButton1Click:Connect(function()
-        if tick() - lastReveal < revealCooldown then
-            return
-        end
-        lastReveal = tick()
-        -- local VFX: pulse nearby hidden shards (change transparency briefly)
-        for _,obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("BasePart") and obj.Name:sub(1,9) == "LightShard" then
-                local orig = obj.Transparency
-                obj.Transparency = math.max(0, orig - 0.3)
-                spawn(function()
-                    wait(1.4)
-                    pcall(function() obj.Transparency = orig end)
-                end)
-            end
-        end
-        -- notify server for metrics/validation
-        pcall(function() revealRemote:FireServer() end)
+        pulseReveal()
     end)
 end
 
