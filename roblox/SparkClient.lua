@@ -128,6 +128,7 @@ local dialogLabel = gui:WaitForChild("DialogLabel")
 local patienceBar = gui:WaitForChild("PatienceBar")
 local patienceFill = patienceBar:WaitForChild("PatienceFill")
 local reflectionGui = gui:WaitForChild("ReflectionGui")
+local portrait = gui:FindFirstChild("DialogPortrait")
 
 -- Find spark part in workspace
 local spark = workspace:FindFirstChild("Spark")
