@@ -313,7 +313,7 @@ sp.Triggered:Connect(function(player)
     elseif string.find(refl, "🌱") then greeting = "Gentle growth still shines. Let it guide your path."
     elseif string.find(refl, "🧡") then greeting = "That warmth you felt? Hold onto it. It shows the way." end
     local lines = { greeting, "Collect three Light Shards to form the lightbridge ahead.", "Press R or tap Reveal to glimpse the unseen." }
-    pcall(function() dialogEvent:FireClient(player, {speaker = "Solari", lines = lines}) end)
+    pcall(function() dialogEvent:FireClient(player, {speaker = "Solari", lines = lines, npcName = "SolariNPC"}) end)
 end)
 ]]
 ensureServerScript("Zone2Content", ZONE2_SOURCE)
@@ -521,7 +521,20 @@ end)
 -- Dialog listener
 dialogEvent.OnClientEvent:Connect(function(data)
     if not data then return end
-    local lines = data.lines or {} local speaker = data.speaker or ""
+    local lines = data.lines or {}
+    local speaker = data.speaker or ""
+    -- Try cinematic dialog first
+    local ctrl = gui:FindFirstChild("_DialogController")
+    if ctrl and ctrl:IsA("BindableFunction") then
+        local npcModel = nil
+        if data.npcName and workspace:FindFirstChild(data.npcName) then
+            local candidate = workspace:FindFirstChild(data.npcName)
+            if candidate:IsA("Model") then npcModel = candidate end
+        end
+        ctrl:Invoke({speaker = speaker, lines = lines, npcModel = npcModel, cameraPath = nil})
+        return
+    end
+    -- Fallback to simple label
     local portraitImg = nil
     pcall(function() local mod = ReplicatedStorage:FindFirstChild("IgnisiaAssets") if mod then local ok,m = pcall(require, mod) if ok and type(m)=="table" and m.npcDecals and m.npcDecals[speaker] and m.npcDecals[speaker]~="" then portraitImg = m.npcDecals[speaker] end end end)
     if portraitImg then portrait.Image = portraitImg portrait.Visible = true end
@@ -551,6 +564,115 @@ local vignId = assets.ui and assets.ui.vignetteImage or ""
 if vignId ~= "" then
     local vign = gui:FindFirstChild("IgnisiaVignette") or Instance.new("ImageLabel")
     vign.Name = "IgnisiaVignette" vign.Size = UDim2.new(1,0,1,0) vign.Position = UDim2.new(0,0,0,0) vign.BackgroundTransparency = 1 vign.Image = vignId vign.ImageTransparency = 1 vign.ZIndex = 50 vign.Parent = gui
+end
+
+-- Cinematic Dialog UI (viewport portrait + typewriter + next button)
+local DialogRoot = gui:FindFirstChild("CinematicDialog") or Instance.new("Frame")
+DialogRoot.Name = "CinematicDialog"
+DialogRoot.Size = UDim2.new(0.6,0,0.28,0)
+DialogRoot.Position = UDim2.new(0.2,0,0.68,0)
+DialogRoot.BackgroundColor3 = Color3.fromRGB(10,10,10)
+DialogRoot.BackgroundTransparency = 0.2
+DialogRoot.Visible = false
+DialogRoot.Parent = gui
+
+local uic = Instance.new("UICorner") uic.CornerRadius = UDim.new(0,12) uic.Parent = DialogRoot
+
+local Viewport = Instance.new("ViewportFrame")
+Viewport.Name = "NPCViewport"
+Viewport.Size = UDim2.new(0.28,0,1,0)
+Viewport.Position = UDim2.new(0,0,0,0)
+Viewport.BackgroundTransparency = 1
+Viewport.Parent = DialogRoot
+local vpCam = Instance.new("Camera") vpCam.CFrame = CFrame.new(Vector3.new(0,2,6), Vector3.new(0,2,0)) vpCam.Parent = Viewport Viewport.CurrentCamera = vpCam
+
+local TextHolder = Instance.new("TextLabel")
+TextHolder.Name = "DialogText"
+TextHolder.RichText = true
+TextHolder.TextWrapped = true
+TextHolder.TextXAlignment = Enum.TextXAlignment.Left
+TextHolder.TextYAlignment = Enum.TextYAlignment.Top
+TextHolder.Size = UDim2.new(0.62,0,0.7,0)
+TextHolder.Position = UDim2.new(0.32,0,0.12,0)
+TextHolder.BackgroundTransparency = 1
+TextHolder.TextColor3 = Color3.new(1,1,1)
+TextHolder.TextScaled = true
+TextHolder.Parent = DialogRoot
+
+local NextBtn = Instance.new("TextButton")
+NextBtn.Name = "NextButton"
+NextBtn.Size = UDim2.new(0.18,0,0.22,0)
+NextBtn.Position = UDim2.new(0.8,0,0.74,0)
+NextBtn.Text = ">>"
+NextBtn.TextScaled = true
+NextBtn.BackgroundColor3 = Color3.fromRGB(40,20,10)
+NextBtn.TextColor3 = Color3.fromRGB(255,255,255)
+NextBtn.Parent = DialogRoot
+local uic2 = Instance.new("UICorner") uic2.CornerRadius = UDim.new(0,8) uic2.Parent = NextBtn
+
+local function typewriterSet(text)
+    -- RichText typewriter with active letter scaling
+    local full = text
+    local i = 0
+    while i < #full do
+        i += 1
+        local shown = string.sub(full, 1, i)
+        local nextChar = string.sub(full, i+1, i+1)
+        if nextChar and nextChar ~= "" then
+            TextHolder.Text = shown .. string.format("<font size=42>%s</font>", nextChar)
+        else
+            TextHolder.Text = shown
+        end
+        task.wait(0.025)
+    end
+end
+
+-- Expose a function on the ScreenGui to drive cinematic dialog
+if not gui:FindFirstChild("_DialogController") then
+    local ctrl = Instance.new("BindableFunction")
+    ctrl.Name = "_DialogController"
+    ctrl.Parent = gui
+end
+
+-- Animate camera helper (basic path of 2 points)
+local function cinematicPan(startCF, endCF, dur)
+    local camera = workspace.CurrentCamera if not camera then return end
+    camera.CameraType = Enum.CameraType.Scriptable
+    local t = 0
+    while t < dur do
+        t += game:GetService("RunService").RenderStepped:Wait()
+        local a = math.clamp(t/dur, 0, 1)
+        camera.CFrame = startCF:Lerp(endCF, a)
+    end
+end
+
+gui._DialogController.OnInvoke = function(payload)
+    -- payload: { speaker, lines = {"...","..."}, npcModel, cameraPath = {startCF,endCF,dur} }
+    DialogRoot.Visible = true
+    -- viewport: clone npcModel if present
+    Viewport:ClearAllChildren() Viewport.CurrentCamera = vpCam vpCam.Parent = Viewport
+    if payload and payload.npcModel and payload.npcModel:IsA("Model") then
+        local clone = payload.npcModel:Clone() clone.Parent = Viewport
+        local primary = clone.PrimaryPart or clone:FindFirstChildWhichIsA("BasePart")
+        if primary then
+            local c = primary.CFrame
+            vpCam.CFrame = CFrame.new(c.Position + Vector3.new(0,1.8,6), c.Position + Vector3.new(0,1.5,0))
+        end
+    end
+    if payload and payload.cameraPath and typeof(payload.cameraPath[1]) == "CFrame" then
+        task.spawn(function() cinematicPan(payload.cameraPath[1], payload.cameraPath[2], payload.cameraPath[3] or 3) end)
+    end
+    local idx = 1
+    local function showLine()
+        local line = payload.lines[idx]
+        if not line then DialogRoot.Visible = false return end
+        typewriterSet(line)
+    end
+    NextBtn.MouseButton1Click:Connect(function()
+        idx += 1
+        showLine()
+    end)
+    showLine()
 end
 ]]
 ensureLocalScript("UIWireUp", UI_WIREUP_SOURCE)
