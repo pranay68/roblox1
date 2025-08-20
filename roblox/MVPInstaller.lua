@@ -56,6 +56,7 @@ ensureRemote("IgnisiaEffectEvent")
 ensureRemote("RevealEvent")
 ensureRemote("DialogEvent")
 ensureRemote("ProfilerEvent")
+ensureRemote("NPCAnimEvent")
 
 -- Assets module (placeholders OK)
 local ASSETS_SOURCE = [[
@@ -187,6 +188,8 @@ local sparkEvent = ReplicatedStorage:FindFirstChild("SparkEvent") or Instance.ne
 sparkEvent.Name = "SparkEvent"
 local effectEvent = ReplicatedStorage:FindFirstChild("IgnisiaEffectEvent") or Instance.new("RemoteEvent", ReplicatedStorage)
 effectEvent.Name = "IgnisiaEffectEvent"
+local npcAnimEvent = ReplicatedStorage:FindFirstChild("NPCAnimEvent") or Instance.new("RemoteEvent", ReplicatedStorage)
+npcAnimEvent.Name = "NPCAnimEvent"
 
 local function attachAura(player)
     local char = player.Character if not char then return end
@@ -209,6 +212,23 @@ sparkEvent.OnServerEvent:Connect(function(player, action, reflectionChoice)
     local ok, SaveService = pcall(function() return require(game:GetService("ServerScriptService"):FindFirstChild("SaveService")) end)
     if ok and SaveService and SaveService.SavePlayer then pcall(function() SaveService:SavePlayer(player) end) end
 end)
+
+-- Allow clients to request playing an animation on a named NPC model in Workspace (server-authoritative)
+npcAnimEvent.OnServerEvent:Connect(function(player, payload)
+    if type(payload) ~= "table" then return end
+    local name = tostring(payload.name or "")
+    local animId = tostring(payload.animId or "")
+    if name == "" or animId == "" then return end
+    local npc = workspace:FindFirstChild(name)
+    if not npc or not npc:IsA("Model") then return end
+    local hum = npc:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    -- simple throttle per player
+    player:SetAttribute("_lastNpcAnim", tick())
+    local animation = Instance.new("Animation") animation.AnimationId = animId
+    local track = hum:LoadAnimation(animation)
+    track:Play()
+end)
 ]]
 ensureServerScript("SparkServer", SPARK_SERVER_SOURCE)
 
@@ -225,6 +245,8 @@ local revealEvent = ReplicatedStorage:FindFirstChild("RevealEvent") or Instance.
 revealEvent.Name = "RevealEvent"
 local dialogEvent = ReplicatedStorage:FindFirstChild("DialogEvent") or Instance.new("RemoteEvent", ReplicatedStorage)
 dialogEvent.Name = "DialogEvent"
+local npcAnimEvent = ReplicatedStorage:FindFirstChild("NPCAnimEvent") or Instance.new("RemoteEvent", ReplicatedStorage)
+npcAnimEvent.Name = "NPCAnimEvent"
 
 local revealCooldowns = {} local REVEAL_COOLDOWN = (okCfg and GameConfig.tuning and GameConfig.tuning.revealCooldown) or 3.0
 revealEvent.OnServerEvent:Connect(function(player)
@@ -313,7 +335,11 @@ sp.Triggered:Connect(function(player)
     elseif string.find(refl, "🌱") then greeting = "Gentle growth still shines. Let it guide your path."
     elseif string.find(refl, "🧡") then greeting = "That warmth you felt? Hold onto it. It shows the way." end
     local lines = { greeting, "Collect three Light Shards to form the lightbridge ahead.", "Press R or tap Reveal to glimpse the unseen." }
-    pcall(function() dialogEvent:FireClient(player, {speaker = "Solari", lines = lines, npcName = "SolariNPC"}) end)
+    pcall(function() dialogEvent:FireClient(player, {speaker = "Solari", lines = lines, npcName = "SolariNPC", perLine = {
+        {animId = "", cameraPath = nil},
+        {animId = "", cameraPath = nil},
+        {animId = "", cameraPath = nil},
+    }}) end)
 end)
 ]]
 ensureServerScript("Zone2Content", ZONE2_SOURCE)
@@ -356,6 +382,7 @@ local sparkEvent = ReplicatedStorage:FindFirstChild("SparkEvent") or Instance.ne
 local effectEvent = ReplicatedStorage:FindFirstChild("IgnisiaEffectEvent") or Instance.new("RemoteEvent", ReplicatedStorage) effectEvent.Name = "IgnisiaEffectEvent"
 local revealEvent = ReplicatedStorage:FindFirstChild("RevealEvent") or Instance.new("RemoteEvent", ReplicatedStorage) revealEvent.Name = "RevealEvent"
 local dialogEvent = ReplicatedStorage:FindFirstChild("DialogEvent") or Instance.new("RemoteEvent", ReplicatedStorage) dialogEvent.Name = "DialogEvent"
+local npcAnimEvent = ReplicatedStorage:FindFirstChild("NPCAnimEvent") or Instance.new("RemoteEvent", ReplicatedStorage) npcAnimEvent.Name = "NPCAnimEvent"
 
 local assets = {}
 do local mod = ReplicatedStorage:FindFirstChild("IgnisiaAssets") if mod and mod:IsA("ModuleScript") then local ok, m = pcall(require, mod) if ok and type(m) == "table" then assets = m end end end
@@ -531,7 +558,7 @@ dialogEvent.OnClientEvent:Connect(function(data)
             local candidate = workspace:FindFirstChild(data.npcName)
             if candidate:IsA("Model") then npcModel = candidate end
         end
-        ctrl:Invoke({speaker = speaker, lines = lines, npcModel = npcModel, cameraPath = nil})
+        ctrl:Invoke({speaker = speaker, lines = lines, npcModel = npcModel, cameraPath = nil, perLine = data.perLine})
         return
     end
     -- Fallback to simple label
@@ -575,6 +602,10 @@ DialogRoot.BackgroundColor3 = Color3.fromRGB(10,10,10)
 DialogRoot.BackgroundTransparency = 0.2
 DialogRoot.Visible = false
 DialogRoot.Parent = gui
+
+-- letterbox bars for cinematic look
+local TopBar = Instance.new("Frame") TopBar.Name = "TopLetterbox" TopBar.Size = UDim2.new(1,0,0,0) TopBar.Position = UDim2.new(0,0,0,0) TopBar.BackgroundColor3 = Color3.new(0,0,0) TopBar.ZIndex = 100 TopBar.Parent = gui
+local BottomBar = Instance.new("Frame") BottomBar.Name = "BottomLetterbox" BottomBar.Size = UDim2.new(1,0,0,0) BottomBar.Position = UDim2.new(0,0,1,0) BottomBar.AnchorPoint = Vector2.new(0,1) BottomBar.BackgroundColor3 = Color3.new(0,0,0) BottomBar.ZIndex = 100 BottomBar.Parent = gui
 
 local uic = Instance.new("UICorner") uic.CornerRadius = UDim.new(0,12) uic.Parent = DialogRoot
 
@@ -646,9 +677,22 @@ local function cinematicPan(startCF, endCF, dur)
     end
 end
 
+-- open/close animation for dialog and letterbox
+local TweenService = game:GetService("TweenService")
+local function openCinematic()
+    DialogRoot.Visible = true
+    TopBar:TweenSize(UDim2.new(1,0,0.07,0), Enum.EasingDirection.Out, Enum.EasingStyle.Sine, 0.25, true)
+    BottomBar:TweenSize(UDim2.new(1,0,0.07,0), Enum.EasingDirection.Out, Enum.EasingStyle.Sine, 0.25, true)
+end
+local function closeCinematic()
+    TopBar:TweenSize(UDim2.new(1,0,0,0), Enum.EasingDirection.Out, Enum.EasingStyle.Sine, 0.25, true)
+    BottomBar:TweenSize(UDim2.new(1,0,0,0), Enum.EasingDirection.Out, Enum.EasingStyle.Sine, 0.25, true)
+    task.delay(0.26, function() DialogRoot.Visible = false end)
+end
+
 gui._DialogController.OnInvoke = function(payload)
     -- payload: { speaker, lines = {"...","..."}, npcModel, cameraPath = {startCF,endCF,dur} }
-    DialogRoot.Visible = true
+    openCinematic()
     -- viewport: clone npcModel if present
     Viewport:ClearAllChildren() Viewport.CurrentCamera = vpCam vpCam.Parent = Viewport
     if payload and payload.npcModel and payload.npcModel:IsA("Model") then
@@ -665,8 +709,19 @@ gui._DialogController.OnInvoke = function(payload)
     local idx = 1
     local function showLine()
         local line = payload.lines[idx]
-        if not line then DialogRoot.Visible = false return end
+        if not line then closeCinematic() return end
+        -- play per-line npc animation if provided (server can drive real NPC via NPCAnimEvent)
+        local per = payload.perLine and payload.perLine[idx]
+        if per and per.animId and per.animId ~= "" and payload.npcModel and payload.npcModel:FindFirstChildOfClass("Humanoid") then
+            local hum = payload.npcModel:FindFirstChildOfClass("Humanoid")
+            local anim = Instance.new("Animation") anim.AnimationId = per.animId
+            local track = hum:LoadAnimation(anim) track:Play()
+        end
         typewriterSet(line)
+        -- optional: trigger server to animate real NPC
+        if per and per.animId and per.animId ~= "" and payload.npcModel and payload.npcModel.Name then
+            pcall(function() ReplicatedStorage:WaitForChild("NPCAnimEvent"):FireServer({name = payload.npcModel.Name, animId = per.animId}) end)
+        end
     end
     NextBtn.MouseButton1Click:Connect(function()
         idx += 1
