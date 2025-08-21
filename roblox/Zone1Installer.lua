@@ -8,7 +8,11 @@ if not RunService:IsStudio() then error("Zone1Installer must be run in Roblox St
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local StarterPlayer = game:GetService("StarterPlayer")
-local StarterPlayerScripts = StarterPlayer:FindFirstChild("StarterPlayerScripts") or Instance.new("StarterPlayerScripts")
+local StarterPlayerScripts = StarterPlayer:FindFirstChild("StarterPlayerScripts")
+if not StarterPlayerScripts then
+    StarterPlayerScripts = Instance.new("StarterPlayerScripts")
+    StarterPlayerScripts.Parent = StarterPlayer
+end
 
 local function ensureRemote(name)
     local r = ReplicatedStorage:FindFirstChild(name)
