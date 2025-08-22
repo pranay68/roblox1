@@ -87,6 +87,18 @@ local function savePlayerData(player)
     if tv and tv.Value == true then
         payload.Trait_Vision = true
     end
+    local pk = player:FindFirstChild("HasPathKey")
+    if pk and pk.Value == true then
+        payload.HasPathKey = true
+    end
+    local shape = player:FindFirstChild("PathKeyShape")
+    if shape and tostring(shape.Value) ~= "" then
+        payload.PathKeyShape = tostring(shape.Value)
+    end
+    local tc = player:FindFirstChild("Trait_Courage")
+    if tc and tc.Value == true then
+        payload.Trait_Courage = true
+    end
     -- Queue saves to avoid bursty writes: add to pending and let flush loop handle retries
     pendingWrites[key] = payload
 end
@@ -140,6 +152,15 @@ Players.PlayerAdded:Connect(function(player)
             end
             if data.Trait_Vision then
                 local tv = Instance.new("BoolValue") tv.Name = "Trait_Vision" tv.Value = true tv.Parent = player
+            end
+            if data.HasPathKey then
+                local v = Instance.new("BoolValue") v.Name = "HasPathKey" v.Value = true v.Parent = player
+            end
+            if data.PathKeyShape then
+                local s = Instance.new("StringValue") s.Name = "PathKeyShape" s.Value = tostring(data.PathKeyShape) s.Parent = player
+            end
+            if data.Trait_Courage then
+                local c = Instance.new("BoolValue") c.Name = "Trait_Courage" c.Value = true c.Parent = player
             end
         end
     end)
