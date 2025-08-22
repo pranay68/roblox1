@@ -7,6 +7,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local CollectionService = game:GetService("CollectionService")
+local Zone1Dialog = nil pcall(function() Zone1Dialog = require(ReplicatedStorage:WaitForChild("Zone1Dialog")) end)
 
 -- try to load assets from ReplicatedStorage (optional)
 local assets = {}
@@ -173,7 +174,7 @@ local function playLocalSound(soundId, loop)
 end
 
 -- Cinematic NPC lines
-local npcLines = {
+local npcLines = Zone1Dialog and Zone1Dialog.openingCinematic or {
     {name="Alex", text="I notice it first."},
     {name="Alexis", text="Heh, it's glowing — dramatic, right?"},
     {name="Solari", text="It's been here, waiting."},
@@ -514,7 +515,14 @@ local function wireReflectionButtons()
     local c1 = reflectionGui:WaitForChild("Choice1")
     local c2 = reflectionGui:WaitForChild("Choice2")
     local c3 = reflectionGui:WaitForChild("Choice3")
-
+    local choices = (Zone1Dialog and Zone1Dialog.reflectionChoices) or {
+        "🧡 Like something I’d been waiting for",
+        "🔥 Like I’m not afraid of my fire",
+        "🌱 Like maybe I’m not broken",
+    }
+    c1.Text = choices[1] or c1.Text
+    c2.Text = choices[2] or c2.Text
+    c3.Text = choices[3] or c3.Text
     local function choose(text)
         reflectionGui:SetAttribute("ChosenReflection", text)
         reflectionGui.Visible = false
@@ -522,10 +530,9 @@ local function wireReflectionButtons()
         dialogLabel.Visible = true
         delay(1.4, function() dialogLabel.Visible = false end)
     end
-
-    c1.MouseButton1Click:Connect(function() choose("🧡 Like something I’d been waiting for") end)
-    c2.MouseButton1Click:Connect(function() choose("🔥 Like I’m not afraid of my fire") end)
-    c3.MouseButton1Click:Connect(function() choose("🌱 Like maybe I’m not broken") end)
+    c1.MouseButton1Click:Connect(function() choose(c1.Text) end)
+    c2.MouseButton1Click:Connect(function() choose(c2.Text) end)
+    c3.MouseButton1Click:Connect(function() choose(c3.Text) end)
 end
 
 -- Effect listener (server broadcast)
