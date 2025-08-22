@@ -4,6 +4,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
+local ServerScriptService = game:GetService("ServerScriptService")
 
 local Zone2 = workspace:FindFirstChild("Zone2")
 if not Zone2 then
@@ -90,6 +91,8 @@ local function onShardTouched(shard)
                 if not Zone2:FindFirstChild("LightBridge") then
                     local bridge = Instance.new("Part") bridge.Name = "LightBridge" bridge.Size = Vector3.new(12,1,4) bridge.Position = Vector3.new(0,3,150) bridge.Anchored = true bridge.BrickColor = BrickColor.new("Institutional white") bridge.Parent = Zone2
                 end
+                if not pl:FindFirstChild("Trait_Vision") then local tv = Instance.new("BoolValue") tv.Name = "Trait_Vision" tv.Value = true tv.Parent = pl end
+                pcall(function() local SS = require(game:GetService("ServerScriptService"):FindFirstChild("SaveService")) if SS and SS.SavePlayer then SS:SavePlayer(pl) end end)
             end
         end
     end)
@@ -201,46 +204,79 @@ end
 ensureIllusions()
 ensureMirrorGrove()
 
--- Solari NPC hub
-local function ensureSolari()
-    if Zone2:FindFirstChild("SolariNPC") then return end
-    local sol = Instance.new("Part")
-    sol.Name = "SolariNPC"
-    sol.Size = Vector3.new(2,5,2)
-    sol.Position = Vector3.new(0, 3, 120)
-    sol.Anchored = true
-    sol.BrickColor = BrickColor.new("Bright orange")
-    sol.Parent = Zone2
-
-    local prompt = Instance.new("ProximityPrompt")
-    prompt.ActionText = "Talk"
-    prompt.ObjectText = "Solari"
-    prompt.HoldDuration = 0.3
-    prompt.MaxActivationDistance = 10
-    prompt.Parent = sol
-
-    prompt.Triggered:Connect(function(player)
-        if not player or not player:IsA("Player") then return end
-        local refl = ""
-        local rv = player:FindFirstChild("ReflectionChoice")
-        if rv and rv.Value then refl = tostring(rv.Value) end
-        local greeting = "Welcome to Lensveil. Your inner light will reveal what is hidden."
-        if string.find(refl, "🔥") then
-            greeting = "Your fire runs strong. Use it to see through illusions."
-        elseif string.find(refl, "🌱") then
-            greeting = "Gentle growth still shines. Let it guide your path."
-        elseif string.find(refl, "🧡") then
-            greeting = "That warmth you felt? Hold onto it. It shows the way."
-        end
-        local lines = {
-            greeting,
-            "Collect three Light Shards to form the lightbridge ahead.",
-            "Press R or tap Reveal to glimpse the unseen."
-        }
-        pcall(function() dialogEvent:FireClient(player, {speaker = "Solari", lines = lines}) end)
-    end)
+-- NPC hub (clones models from ReplicatedStorage/NPCModels if available)
+local function ensureNPCs()
+	local npcFolder = ReplicatedStorage:FindFirstChild("NPCModels")
+	local function spawnNPC(name, pos)
+		if Zone2:FindFirstChild(name) then return end
+		local modelTemplate = npcFolder and npcFolder:FindFirstChild(name)
+		local model = nil
+		if modelTemplate and modelTemplate:IsA("Model") then
+			model = modelTemplate:Clone()
+			model.Name = name
+			model.Parent = Zone2
+			pcall(function() model:PivotTo(CFrame.new(pos)) end)
+			pcall(function()
+				local NPCUtils = require(ReplicatedStorage:FindFirstChild("NPCUtils") or ServerScriptService:FindFirstChild("NPCUtils"))
+				if NPCUtils and NPCUtils.assignNPCNoCollide then NPCUtils:assignNPCNoCollide(model) end
+			end)
+		else
+			-- fallback simple part
+			local p = Instance.new("Part") p.Name = name p.Size = Vector3.new(2,5,2) p.Position = pos p.Anchored = true p.BrickColor = BrickColor.new("Bright orange") p.Parent = Zone2
+			model = p
+		end
+		-- attach talk prompt
+		local promptParent = (model:IsA("Model") and (model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart)) or model
+		local prompt = Instance.new("ProximityPrompt")
+		prompt.ActionText = "Talk"
+		prompt.ObjectText = name
+		prompt.HoldDuration = 0.3
+		prompt.MaxActivationDistance = 10
+		prompt.Parent = promptParent
+		local npcLines = {
+			Solari = {
+				"Welcome to Lensveil. Your inner light will reveal what is hidden.",
+				"Collect three Light Shards to form the lightbridge ahead.",
+				"Press R or tap Reveal to glimpse the unseen.",
+			},
+			Donna = {"We go gently here. Even illusions respect kindness."},
+			Shauna = {"If it looks dramatic, it probably is. But look closer."},
+			Heidi = {"Ground first, then look. Hidden paths don’t rush."},
+			Alex = {"I notice little glints where the path might be."},
+			Alexis = {"Hah, it’s hiding in plain sight."},
+			Tripp = {"Shards pop when you get near. It’s fun."},
+			Trace = {"The bridge forms when the pieces agree."},
+			Emerson = {"(shows a quiet drawing that somehow shines)"},
+		}
+		prompt.Triggered:Connect(function(player)
+			if not player or not player:IsA("Player") then return end
+			local lines = npcLines[name] or {"Hey."}
+			-- soften Solari by reflection
+			if name == "Solari" then
+				local refl = "" local rv = player:FindFirstChild("ReflectionChoice") if rv and rv.Value then refl = tostring(rv.Value) end
+				if string.find(refl, "🔥") then lines[1] = "Your fire runs strong. Use it to see through illusions." end
+				if string.find(refl, "🌱") then lines[1] = "Gentle growth still shines. Let it guide your path." end
+				if string.find(refl, "🧡") then lines[1] = "That warmth you felt? Hold onto it. It shows the way." end
+			end
+			pcall(function() dialogEvent:FireClient(player, {speaker = name, lines = lines, npcName = name}) end)
+		end)
+	end
+	-- anchor positions
+	local anchor = Vector3.new(0,3,120)
+	local offsets = {
+		Solari = Vector3.new(6,0,4),
+		Donna = Vector3.new(-6,0,6),
+		Shauna = Vector3.new(10,0,2),
+		Heidi = Vector3.new(-10,0,2),
+		Alex = Vector3.new(4,0,8),
+		Alexis = Vector3.new(-4,0,8),
+		Tripp = Vector3.new(8,0,10),
+		Trace = Vector3.new(-8,0,10),
+		Emerson = Vector3.new(0,0,12),
+	}
+	for name,off in pairs(offsets) do spawnNPC(name, anchor + off) end
 end
 
-ensureSolari()
+ensureNPCs()
 
 

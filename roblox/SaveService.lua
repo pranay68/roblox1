@@ -83,6 +83,10 @@ local function savePlayerData(player)
     if mirror and mirror.Value == true then
         payload.MirrorSolved = true
     end
+    local tv = player:FindFirstChild("Trait_Vision")
+    if tv and tv.Value == true then
+        payload.Trait_Vision = true
+    end
     -- Queue saves to avoid bursty writes: add to pending and let flush loop handle retries
     pendingWrites[key] = payload
 end
@@ -133,6 +137,9 @@ Players.PlayerAdded:Connect(function(player)
             end
             if data.MirrorSolved then
                 local bv = Instance.new("BoolValue") bv.Name = "MirrorSolved" bv.Value = true bv.Parent = player
+            end
+            if data.Trait_Vision then
+                local tv = Instance.new("BoolValue") tv.Name = "Trait_Vision" tv.Value = true tv.Parent = player
             end
         end
     end)
