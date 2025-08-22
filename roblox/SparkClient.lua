@@ -311,6 +311,18 @@ end)
 local function playCinematicOnce()
     local camera = workspace.CurrentCamera
     if not camera then return end
+    local gui = playerGui:FindFirstChild("IgnisiaUI")
+    local ctrl = gui and gui:FindFirstChild("_DialogController")
+    -- If cinematic controller exists (from installer/UIWireUp), use it for letterbox + typewriter
+    if ctrl and ctrl:IsA("BindableFunction") then
+        local startCF = CFrame.new(spark.Position + Vector3.new(0, 30, -60), spark.Position)
+        local endCF = CFrame.new(spark.Position + Vector3.new(0, 8, -18), spark.Position)
+        local lines = {}
+        for _,e in ipairs(npcLines) do table.insert(lines, (e.name ~= "" and (e.name..": ") or "")..tostring(e.text)) end
+        ctrl:Invoke({ speaker = "", lines = lines, npcModel = nil, cameraPath = {startCF, endCF, 4.0}, perLine = nil })
+        return
+    end
+    -- Fallback: simple pan and text label
     camera.CameraType = Enum.CameraType.Scriptable
     local startCF = CFrame.new(spark.Position + Vector3.new(0, 30, -60), spark.Position)
     local endCF = CFrame.new(spark.Position + Vector3.new(0, 8, -18), spark.Position)
@@ -322,25 +334,7 @@ local function playCinematicOnce()
         camera.CFrame = startCF:Lerp(endCF, alpha)
         RunService.RenderStepped:Wait()
     end
-
     for _,entry in ipairs(npcLines) do
-        -- set portrait if available from assets
-        local portraitImg = nil
-        pcall(function()
-            local a = ReplicatedStorage:FindFirstChild("IgnisiaAssets")
-            if a then
-                local ok, m = pcall(require, a)
-                if ok and type(m) == "table" and m.npcDecals and m.npcDecals[entry.name] and m.npcDecals[entry.name] ~= "" then
-                    portraitImg = m.npcDecals[entry.name]
-                end
-            end
-        end)
-        if portraitImg and portrait then
-            portrait.Image = portraitImg
-            portrait.Visible = true
-        else
-            if portrait then portrait.Visible = false end
-        end
         dialogLabel.Text = entry.name..": "..entry.text
         dialogLabel.Visible = true
         wait(2.2)
