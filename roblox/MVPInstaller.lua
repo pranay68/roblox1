@@ -146,6 +146,29 @@ if not spark then
     local prompt = Instance.new("ProximityPrompt") prompt.ActionText = "Touch the Spark?" prompt.ObjectText = "Spark" prompt.RequiresLineOfSight = false prompt.MaxActivationDistance = 8 prompt.HoldDuration = 0 prompt.Parent = spark
 end
 
+-- Zone 1 NPC spawner near Spark (names from docs)
+local function ensureZ1NPCs()
+    local names = {"Solari","Donna","Shauna","Heidi","Alex","Alexis","Tripp","Trace","Emerson"}
+    local anchor = spark and spark.Position or Vector3.new(0,2,0)
+    local npcFolder = ReplicatedStorage:FindFirstChild("NPCModels")
+    local offsets = {
+        Solari = Vector3.new(8,0,6), Donna = Vector3.new(-8,0,6), Shauna = Vector3.new(10,0,-4), Heidi = Vector3.new(-10,0,-4),
+        Alex = Vector3.new(4,0,10), Alexis = Vector3.new(-4,0,10), Tripp = Vector3.new(12,0,8), Trace = Vector3.new(-12,0,8), Emerson = Vector3.new(0,0,12),
+    }
+    for _,name in ipairs(names) do
+        if not workspace:FindFirstChild(name) then
+            local template = npcFolder and npcFolder:FindFirstChild(name)
+            local pos = anchor + (offsets[name] or Vector3.new(0,0,0))
+            if template and template:IsA("Model") then
+                local m = template:Clone() m.Name = name m.Parent = workspace pcall(function() m:PivotTo(CFrame.new(pos)) end)
+            else
+                local p = Instance.new("Part") p.Name = name p.Size = Vector3.new(2,5,2) p.Position = pos p.Anchored = true p.BrickColor = BrickColor.new("Bright orange") p.Parent = workspace
+            end
+        end
+    end
+end
+ensureZ1NPCs()
+
 -- Server: SaveService (MVP)
 local SAVE_SOURCE = [[
 local Players = game:GetService("Players")
@@ -759,4 +782,5 @@ end
 ensureLocalScript("UIWireUp", UI_WIREUP_SOURCE)
 
 print("MVPInstaller completed: ReplicatedStorage, ServerScriptService, StarterPlayerScripts, and Workspace are set up.")
+print("NPCs: Solari, Donna, Shauna, Heidi, Alex, Alexis, Tripp, Trace, Emerson spawned (fallback parts if models missing)")
 
