@@ -393,6 +393,49 @@ end)
 ]]
 ensureServerScript("Zone2Content", ZONE2_SOURCE)
 
+-- Zone 2 NPC spawner near gate anchor (Emerson, Solari, Shawna, Hope, Donna)
+local function ensureZ2NPCs()
+	local okCfg, GameConfig = pcall(function() return require(ReplicatedStorage:WaitForChild("GameConfig")) end)
+	local anchor = (okCfg and GameConfig.positions and GameConfig.positions.zone2GateTeleport) or Vector3.new(0,5,120)
+	local base = Vector3.new(anchor.X, anchor.Y, anchor.Z)
+	local npcFolder = ReplicatedStorage:FindFirstChild("NPCModels")
+	local Zone2 = workspace:FindFirstChild("Zone2") or workspace
+	local function spawn(name, offset, lines)
+		if Zone2:FindFirstChild(name) then return end
+		local pos = base + offset
+		local template = npcFolder and npcFolder:FindFirstChild(name)
+		local model
+		if template and template:IsA("Model") then
+			model = template:Clone() model.Name = name model.Parent = Zone2 pcall(function() model:PivotTo(CFrame.new(pos)) end)
+		else
+			local p = Instance.new("Part") p.Name = name p.Size = Vector3.new(2,5,2) p.Position = pos p.Anchored = true p.BrickColor = BrickColor.new("Bright orange") p.Parent = Zone2
+			model = p
+		end
+		local ppParent = (model:IsA("Model") and (model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart)) or model
+		local pp = Instance.new("ProximityPrompt", ppParent) pp.ActionText = "Talk" pp.ObjectText = name pp.HoldDuration = 0.3 pp.MaxActivationDistance = 10
+		pp.Triggered:Connect(function(player)
+			pcall(function() ReplicatedStorage:WaitForChild("DialogEvent"):FireClient(player, {speaker = name, lines = lines or {"Hey."}}) end)
+		end)
+	end
+	spawn("Solari", Vector3.new(6,0,4), {
+		"Okay, so—fun fact? Mirrors here don’t show your face. They show your thoughts.",
+		"What if the way you see the world… is the thing shaping it? What if it’s been you this whole time?",
+	})
+	spawn("Emerson", Vector3.new(-6,0,6), {
+		"Some thoughts are loud. Some are quiet. But they all make shapes.",
+	})
+	spawn("Shawna", Vector3.new(10,0,2), {
+		"I once had a mirror here turn into a pineapple. Not sure what that says about me.",
+	})
+	spawn("Hope", Vector3.new(-10,0,2), {
+		"This place listens. Even when you don’t say anything out loud.",
+	})
+	spawn("Donna", Vector3.new(0,0,10), {
+		"Welcome to Lensveil. A place where what you see… depends on what you believe.",
+	})
+end
+ensureZ2NPCs()
+
 -- Server: ZoneGate
 local ZONE_GATE_SOURCE = [[
 local TELEPORT_POS = Vector3.new(0,5,120)
@@ -514,6 +557,43 @@ for _,g in ipairs(gates) do
 end
 ]]
 ensureServerScript("Zone3Content", ZONE3_SOURCE)
+
+-- Zone 3 NPC spawner (Trace, Skylar, Donna)
+local function ensureZ3NPCs()
+	local base = Vector3.new(0,5,220)
+	local Zone3 = workspace:FindFirstChild("Zone3") or workspace
+	local npcFolder = ReplicatedStorage:FindFirstChild("NPCModels")
+	local function spawn(name, offset, lines)
+		if Zone3:FindFirstChild(name) then return end
+		local pos = base + offset
+		local template = npcFolder and npcFolder:FindFirstChild(name)
+		local model
+		if template and template:IsA("Model") then
+			model = template:Clone() model.Name = name model.Parent = Zone3 pcall(function() model:PivotTo(CFrame.new(pos)) end)
+		else
+			local p = Instance.new("Part") p.Name = name p.Size = Vector3.new(2,5,2) p.Position = pos p.Anchored = true p.BrickColor = BrickColor.new("Bright orange") p.Parent = Zone3
+			model = p
+		end
+		local ppParent = (model:IsA("Model") and (model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart)) or model
+		local pp = Instance.new("ProximityPrompt", ppParent) pp.ActionText = "Talk" pp.ObjectText = name pp.HoldDuration = 0.3 pp.MaxActivationDistance = 10
+		pp.Triggered:Connect(function(player)
+			pcall(function() ReplicatedStorage:WaitForChild("DialogEvent"):FireClient(player, {speaker = name, lines = lines or {"Hey."}}) end)
+		end)
+	end
+	spawn("Trace", Vector3.new(-8,0,-6), {
+		"The metal’s alive, kinda. It melts to your choices.",
+		"Mine accidentally unlocked a room full of raccoons. Long story.",
+	})
+	spawn("Skylar", Vector3.new(8,0,-6), {
+		"Mine started tiny. Just a stub. But every choice shaped it stronger.",
+		"You’ll build yours from what you decide. No one else can shape it for you.",
+	})
+	spawn("Donna", Vector3.new(0,0,-10), {
+		"Even a small key can unlock a new future.",
+		"It’s not about picking a perfect version of you… just an honest one.",
+	})
+end
+ensureZ3NPCs()
 
 -- Client: SparkClient (MVP, trimmed but feature-complete)
 local SPARK_CLIENT_SOURCE = [[
