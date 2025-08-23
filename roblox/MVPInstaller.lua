@@ -416,6 +416,105 @@ end)
 ]]
 ensureServerScript("ZoneGate", ZONE_GATE_SOURCE)
 
+-- Server: Zone3Content (embedded)
+local ZONE3_SOURCE = [[
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
+local Zone3 = workspace:FindFirstChild("Zone3") or Instance.new("Folder")
+Zone3.Name = "Zone3" Zone3.Parent = workspace
+local dialogEvent = ReplicatedStorage:FindFirstChild("DialogEvent") or Instance.new("RemoteEvent", ReplicatedStorage)
+dialogEvent.Name = "DialogEvent"
+
+local function savePlayer(pl)
+	pcall(function() local SS=require(ServerScriptService:FindFirstChild("SaveService")) if SS and SS.SavePlayer then SS:SavePlayer(pl) end end)
+end
+
+local function groundAt(pos)
+	local ray = Ray.new(pos + Vector3.new(0,50,0), Vector3.new(0,-200,0))
+	local part, hit = workspace:FindPartOnRay(ray)
+	if hit then return Vector3.new(pos.X, hit.Y + 1.5, pos.Z) end
+	return pos
+end
+
+local anchor = Vector3.new(0,5,220)
+
+-- Intro trigger (opening lines)
+local intro = Zone3:FindFirstChild("Zone3IntroTrigger") or Instance.new("Part")
+intro.Name = "Zone3IntroTrigger" intro.Size = Vector3.new(14,6,14) intro.Position = groundAt(anchor) intro.Anchored = true intro.Transparency = 1 intro.CanCollide = false intro.Parent = Zone3
+intro.Touched:Connect(function(hit)
+	local pl = Players:GetPlayerFromCharacter(hit.Parent)
+	if not pl then return end
+	if pl:GetAttribute("_Z3IntroShown") then return end
+	pl:SetAttribute("_Z3IntroShown", true)
+	local lines = {
+		"TRACE: I was trying to build a flying skateboard. Accidentally made a toaster with wings. It screams when it launches. Wanna see?",
+		"SKYLAR: He’s not kidding. It really screams. But this mold? That’s for you.",
+		"DONNA: This place listens when you choose. Not who you were… but who you’re ready to become.",
+		"TRACE: You don’t even have to get it ‘right.’ You just have to mean it.",
+		"SKYLAR: You ready to shape something no one else can?",
+	}
+	pcall(function() dialogEvent:FireClient(pl, {speaker = "", lines = lines}) end)
+end)
+
+-- Forge platform
+local forge = Zone3:FindFirstChild("Forge") or Instance.new("Part")
+forge.Name = "Forge" forge.Size = Vector3.new(10,1,10)
+forge.Position = groundAt(anchor + Vector3.new(0,0,0)) forge.Anchored = true forge.BrickColor = BrickColor.new("Dirt brown") forge.Parent = Zone3
+local prompt = forge:FindFirstChildOfClass("ProximityPrompt") or Instance.new("ProximityPrompt", forge)
+prompt.ActionText = "Begin Forge" prompt.ObjectText = "Pathforge" prompt.HoldDuration = 0.6 prompt.MaxActivationDistance = 10
+prompt.Triggered:Connect(function(player)
+	if not player or not player:IsA("Player") then return end
+	if player:FindFirstChild("HasPathKey") and player.HasPathKey.Value == true then
+		pcall(function() dialogEvent:FireClient(player, {speaker = "Solari", lines = {"Your key is already forged.", "Try the gates."}}) end)
+		return
+	end
+	local flag = player:FindFirstChild("_Forging") or Instance.new("BoolValue", player) flag.Name = "_Forging" flag.Value = true
+	pcall(function() dialogEvent:FireClient(player, {speaker = "Solari", lines = {"Breathe. Choose the path that feels true.", "Your key takes shape as you decide."}}) end)
+end)
+
+-- Choice pads
+local choices = {
+	{ name = "Courage", offset = Vector3.new(-8,0,0), color = BrickColor.new("Bright orange") },
+	{ name = "Wonder", offset = Vector3.new(0,0,8), color = BrickColor.new("Pastel blue-green") },
+	{ name = "Intuition", offset = Vector3.new(8,0,0), color = BrickColor.new("Mint") },
+}
+for _,c in ipairs(choices) do
+	local p = Zone3:FindFirstChild("Choice_"..c.name) or Instance.new("Part") p.Name = "Choice_"..c.name p.Size = Vector3.new(5,1,5)
+	p.Position = groundAt(forge.Position + c.offset) p.Anchored = true p.BrickColor = c.color p.Parent = Zone3
+	p.Touched:Connect(function(hit)
+		local pl = Players:GetPlayerFromCharacter(hit.Parent) if not pl then return end
+		local root = pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") if not root then return end
+		if (root.Position - p.Position).Magnitude > 6 then return end
+		if not pl:FindFirstChild("_Forging") then return end
+		if not pl:FindFirstChild("HasPathKey") then local v = Instance.new("BoolValue", pl) v.Name = "HasPathKey" v.Value = true end
+		local s = pl:FindFirstChild("PathKeyShape") or Instance.new("StringValue", pl) s.Name = "PathKeyShape" s.Value = c.name
+		if c.name == "Courage" then if not pl:FindFirstChild("Trait_Courage") then local t = Instance.new("BoolValue", pl) t.Name = "Trait_Courage" t.Value = true end end
+		pcall(function() pl._Forging:Destroy() end)
+		savePlayer(pl)
+		pcall(function() dialogEvent:FireClient(pl, {speaker = "Solari", lines = {"You forged your key: "..c.name..".", "Identity gates will answer now."}}) end)
+	end)
+end
+
+-- Gates
+local gates = {
+	{ name = "Gate_Courage", offset = Vector3.new(-16,0,-12), need = "Courage", color = BrickColor.new("Bright orange") },
+	{ name = "Gate_Wonder", offset = Vector3.new(0,0,18), need = "Wonder", color = BrickColor.new("Pastel blue-green") },
+	{ name = "Gate_Intuition", offset = Vector3.new(16,0,-12), need = "Intuition", color = BrickColor.new("Mint") },
+}
+for _,g in ipairs(gates) do
+	local gate = Zone3:FindFirstChild(g.name) or Instance.new("Part") gate.Name = g.name gate.Size = Vector3.new(6,8,1)
+	gate.Position = groundAt(forge.Position + g.offset) gate.Anchored = true gate.BrickColor = g.color gate.Parent = Zone3
+	local pp = gate:FindFirstChildOfClass("ProximityPrompt") or Instance.new("ProximityPrompt", gate)
+	pp.ActionText = "Open" pp.ObjectText = g.name pp.HoldDuration = 0.3 pp.MaxActivationDistance = 8
+	pp.Triggered:Connect(function(player)
+		local s = player:FindFirstChild("PathKeyShape")
+		if s and tostring(s.Value) == g.need then gate.CanCollide = false gate.Transparency = 0.6 pcall(function() dialogEvent:FireClient(player, {speaker = "Solari", lines = {"The gate recognizes your key.", "Go on."}}) end) else pcall(function() dialogEvent:FireClient(player, {speaker = "Solari", lines = {"It doesn’t resonate yet.", "Forge your key first."}}) end) end
+	end)
+end
+]]
+ensureServerScript("Zone3Content", ZONE3_SOURCE)
+
 -- Client: SparkClient (MVP, trimmed but feature-complete)
 local SPARK_CLIENT_SOURCE = [[
 local Players = game:GetService("Players")
