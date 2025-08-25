@@ -76,6 +76,8 @@ local function attachAuraToCharacter(player)
             auraColor = Color3.fromRGB(255, 110, 40)
         elseif string.find(refl, "🌱") then
             auraColor = Color3.fromRGB(120, 200, 120)
+        elseif string.find(refl, "💫") then
+            auraColor = Color3.fromRGB(180, 200, 255)
         elseif string.find(refl, "🧡") then
             auraColor = Color3.fromRGB(255, 180, 90)
         end
@@ -135,7 +137,7 @@ sparkEvent.OnServerEvent:Connect(function(player, action, reflectionChoice)
 
     if reflectionChoice and reflectionChoice ~= "" then
         local allowed = false
-        if string.find(reflectionChoice, "🧡") or string.find(reflectionChoice, "🔥") or string.find(reflectionChoice, "🌱") then
+        if string.find(reflectionChoice, "🧡") or string.find(reflectionChoice, "🔥") or string.find(reflectionChoice, "🌱") or string.find(reflectionChoice, "💫") then
             allowed = true
         end
         if not allowed then reflectionChoice = "🧡" end

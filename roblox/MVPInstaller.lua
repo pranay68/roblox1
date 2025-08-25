@@ -8,7 +8,11 @@ if not RunService:IsStudio() then error("MVPInstaller must be run in Roblox Stud
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local StarterPlayer = game:GetService("StarterPlayer")
-local StarterPlayerScripts = StarterPlayer:FindFirstChild("StarterPlayerScripts") or Instance.new("StarterPlayerScripts")
+local StarterPlayerScripts = StarterPlayer:FindFirstChild("StarterPlayerScripts")
+if not StarterPlayerScripts then
+	StarterPlayerScripts = Instance.new("StarterPlayerScripts")
+	StarterPlayerScripts.Parent = StarterPlayer
+end
 
 -- helpers
 local function ensureRemote(name)
@@ -106,6 +110,32 @@ return cfg
 ]]
 ensureModuleScript("GameConfig", GAMECONFIG_SOURCE)
 
+-- Zone 1 Dialog (official lines)
+local ZONE1_DIALOG_SOURCE = [[
+local Zone1Dialog = {}
+Zone1Dialog.openingCinematic = {
+	{name = "Solari", text = "Whoa. Look at this little guy—still glowing after all that? …Same."},
+	{name = "Solari", text = "Hey! You made it! I wasn’t sure you’d show... You don’t feel like a myth."},
+	{name = "Donna", text = "The light inside you… it remembers. Even if you forgot."},
+	{name = "Shauna", text = "BOOM! Did I scare you? No? Okay well, pretend I did. I have a reputation to uphold."},
+	{name = "Solari", text = "Shauna thinks she’s mysterious. Really she just likes dramatic entrances."},
+	{name = "Shauna", text = "Excuse you. This place needs drama... You pose."},
+	{name = "Heidi", text = "Or… you breathe. Sometimes light needs quiet to be heard."},
+	{name = "Donna", text = "This is Ignisia. The place where the spark first wakes up. Yours is here somewhere—waiting."},
+	{name = "Solari", text = "Let’s find it. Before Shauna tries to name it something like “Sir Sizzlepuff.”"},
+	{name = "Shauna", text = "Wow. That’s actually kind of amazing. I claim full naming rights."},
+	{name = "Donna", text = "Follow the flicker. It knows you."},
+	{name = "Solari", text = "Let’s go spark-searching. You ready?"},
+}
+Zone1Dialog.reflectionChoices = {
+	"🔥 Like something inside me finally said: \"I'm here.\"",
+	"🌱 Small, but brave. Like a candle lighting in the dark.",
+	"💫 Honestly? I didn’t think I had one. But… maybe I do.",
+}
+return Zone1Dialog
+]]
+ensureModuleScript("Zone1Dialog", ZONE1_DIALOG_SOURCE)
+
 -- Spark part + prompt
 local spark = workspace:FindFirstChild("Spark")
 if not spark then
@@ -119,6 +149,29 @@ if not spark then
     local pe = Instance.new("ParticleEmitter") pe.Rate = 12 pe.Lifetime = NumberRange.new(1,2) pe.Speed = NumberRange.new(0.6,1.4) pe.Parent = spark
     local prompt = Instance.new("ProximityPrompt") prompt.ActionText = "Touch the Spark?" prompt.ObjectText = "Spark" prompt.RequiresLineOfSight = false prompt.MaxActivationDistance = 8 prompt.HoldDuration = 0 prompt.Parent = spark
 end
+
+-- Zone 1 NPC spawner near Spark (names from docs)
+local function ensureZ1NPCs()
+    local names = {"Solari","Donna","Shauna","Heidi","Alex","Alexis","Tripp","Trace","Emerson"}
+    local anchor = spark and spark.Position or Vector3.new(0,2,0)
+    local npcFolder = ReplicatedStorage:FindFirstChild("NPCModels")
+    local offsets = {
+        Solari = Vector3.new(8,0,6), Donna = Vector3.new(-8,0,6), Shauna = Vector3.new(10,0,-4), Heidi = Vector3.new(-10,0,-4),
+        Alex = Vector3.new(4,0,10), Alexis = Vector3.new(-4,0,10), Tripp = Vector3.new(12,0,8), Trace = Vector3.new(-12,0,8), Emerson = Vector3.new(0,0,12),
+    }
+    for _,name in ipairs(names) do
+        if not workspace:FindFirstChild(name) then
+            local template = npcFolder and npcFolder:FindFirstChild(name)
+            local pos = anchor + (offsets[name] or Vector3.new(0,0,0))
+            if template and template:IsA("Model") then
+                local m = template:Clone() m.Name = name m.Parent = workspace pcall(function() m:PivotTo(CFrame.new(pos)) end)
+            else
+                local p = Instance.new("Part") p.Name = name p.Size = Vector3.new(2,5,2) p.Position = pos p.Anchored = true p.BrickColor = BrickColor.new("Bright orange") p.Parent = workspace
+            end
+        end
+    end
+end
+ensureZ1NPCs()
 
 -- Server: SaveService (MVP)
 local SAVE_SOURCE = [[
@@ -344,6 +397,49 @@ end)
 ]]
 ensureServerScript("Zone2Content", ZONE2_SOURCE)
 
+-- Zone 2 NPC spawner near gate anchor (Emerson, Solari, Shawna, Hope, Donna)
+local function ensureZ2NPCs()
+	local okCfg, GameConfig = pcall(function() return require(ReplicatedStorage:WaitForChild("GameConfig")) end)
+	local anchor = (okCfg and GameConfig.positions and GameConfig.positions.zone2GateTeleport) or Vector3.new(0,5,120)
+	local base = Vector3.new(anchor.X, anchor.Y, anchor.Z)
+	local npcFolder = ReplicatedStorage:FindFirstChild("NPCModels")
+	local Zone2 = workspace:FindFirstChild("Zone2") or workspace
+	local function spawn(name, offset, lines)
+		if Zone2:FindFirstChild(name) then return end
+		local pos = base + offset
+		local template = npcFolder and npcFolder:FindFirstChild(name)
+		local model
+		if template and template:IsA("Model") then
+			model = template:Clone() model.Name = name model.Parent = Zone2 pcall(function() model:PivotTo(CFrame.new(pos)) end)
+		else
+			local p = Instance.new("Part") p.Name = name p.Size = Vector3.new(2,5,2) p.Position = pos p.Anchored = true p.BrickColor = BrickColor.new("Bright orange") p.Parent = Zone2
+			model = p
+		end
+		local ppParent = (model:IsA("Model") and (model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart)) or model
+		local pp = Instance.new("ProximityPrompt", ppParent) pp.ActionText = "Talk" pp.ObjectText = name pp.HoldDuration = 0.3 pp.MaxActivationDistance = 10
+		pp.Triggered:Connect(function(player)
+			pcall(function() ReplicatedStorage:WaitForChild("DialogEvent"):FireClient(player, {speaker = name, lines = lines or {"Hey."}}) end)
+		end)
+	end
+	spawn("Solari", Vector3.new(6,0,4), {
+		"Okay, so—fun fact? Mirrors here don’t show your face. They show your thoughts.",
+		"What if the way you see the world… is the thing shaping it? What if it’s been you this whole time?",
+	})
+	spawn("Emerson", Vector3.new(-6,0,6), {
+		"Some thoughts are loud. Some are quiet. But they all make shapes.",
+	})
+	spawn("Shawna", Vector3.new(10,0,2), {
+		"I once had a mirror here turn into a pineapple. Not sure what that says about me.",
+	})
+	spawn("Hope", Vector3.new(-10,0,2), {
+		"This place listens. Even when you don’t say anything out loud.",
+	})
+	spawn("Donna", Vector3.new(0,0,10), {
+		"Welcome to Lensveil. A place where what you see… depends on what you believe.",
+	})
+end
+ensureZ2NPCs()
+
 -- Server: ZoneGate
 local ZONE_GATE_SOURCE = [[
 local TELEPORT_POS = Vector3.new(0,5,120)
@@ -366,6 +462,142 @@ proximity.Triggered:Connect(function(player)
 end)
 ]]
 ensureServerScript("ZoneGate", ZONE_GATE_SOURCE)
+
+-- Server: Zone3Content (embedded)
+local ZONE3_SOURCE = [[
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
+local Zone3 = workspace:FindFirstChild("Zone3") or Instance.new("Folder")
+Zone3.Name = "Zone3" Zone3.Parent = workspace
+local dialogEvent = ReplicatedStorage:FindFirstChild("DialogEvent") or Instance.new("RemoteEvent", ReplicatedStorage)
+dialogEvent.Name = "DialogEvent"
+
+local function savePlayer(pl)
+	pcall(function() local SS=require(ServerScriptService:FindFirstChild("SaveService")) if SS and SS.SavePlayer then SS:SavePlayer(pl) end end)
+end
+
+local function groundAt(pos)
+	local ray = Ray.new(pos + Vector3.new(0,50,0), Vector3.new(0,-200,0))
+	local part, hit = workspace:FindPartOnRay(ray)
+	if hit then return Vector3.new(pos.X, hit.Y + 1.5, pos.Z) end
+	return pos
+end
+
+local anchor = Vector3.new(0,5,220)
+
+-- Intro trigger (opening lines)
+local intro = Zone3:FindFirstChild("Zone3IntroTrigger") or Instance.new("Part")
+intro.Name = "Zone3IntroTrigger" intro.Size = Vector3.new(14,6,14) intro.Position = groundAt(anchor) intro.Anchored = true intro.Transparency = 1 intro.CanCollide = false intro.Parent = Zone3
+intro.Touched:Connect(function(hit)
+	local pl = Players:GetPlayerFromCharacter(hit.Parent)
+	if not pl then return end
+	if pl:GetAttribute("_Z3IntroShown") then return end
+	pl:SetAttribute("_Z3IntroShown", true)
+	local lines = {
+		"TRACE: I was trying to build a flying skateboard. Accidentally made a toaster with wings. It screams when it launches. Wanna see?",
+		"SKYLAR: He’s not kidding. It really screams. But this mold? That’s for you.",
+		"DONNA: This place listens when you choose. Not who you were… but who you’re ready to become.",
+		"TRACE: You don’t even have to get it ‘right.’ You just have to mean it.",
+		"SKYLAR: You ready to shape something no one else can?",
+	}
+	pcall(function() dialogEvent:FireClient(pl, {speaker = "", lines = lines}) end)
+end)
+
+-- Forge platform
+local forge = Zone3:FindFirstChild("Forge") or Instance.new("Part")
+forge.Name = "Forge" forge.Size = Vector3.new(10,1,10)
+forge.Position = groundAt(anchor + Vector3.new(0,0,0)) forge.Anchored = true forge.BrickColor = BrickColor.new("Dirt brown") forge.Parent = Zone3
+local prompt = forge:FindFirstChildOfClass("ProximityPrompt") or Instance.new("ProximityPrompt", forge)
+prompt.ActionText = "Begin Forge" prompt.ObjectText = "Pathforge" prompt.HoldDuration = 0.6 prompt.MaxActivationDistance = 10
+prompt.Triggered:Connect(function(player)
+	if not player or not player:IsA("Player") then return end
+	if player:FindFirstChild("HasPathKey") and player.HasPathKey.Value == true then
+		pcall(function() dialogEvent:FireClient(player, {speaker = "Solari", lines = {"Your key is already forged.", "Try the gates."}}) end)
+		return
+	end
+	local flag = player:FindFirstChild("_Forging") or Instance.new("BoolValue", player) flag.Name = "_Forging" flag.Value = true
+	pcall(function() dialogEvent:FireClient(player, {speaker = "Solari", lines = {"Breathe. Choose the path that feels true.", "Your key takes shape as you decide."}}) end)
+end)
+
+-- Choice pads
+local choices = {
+	{ name = "Courage", offset = Vector3.new(-8,0,0), color = BrickColor.new("Bright orange") },
+	{ name = "Wonder", offset = Vector3.new(0,0,8), color = BrickColor.new("Pastel blue-green") },
+	{ name = "Intuition", offset = Vector3.new(8,0,0), color = BrickColor.new("Mint") },
+}
+for _,c in ipairs(choices) do
+	local p = Zone3:FindFirstChild("Choice_"..c.name) or Instance.new("Part") p.Name = "Choice_"..c.name p.Size = Vector3.new(5,1,5)
+	p.Position = groundAt(forge.Position + c.offset) p.Anchored = true p.BrickColor = c.color p.Parent = Zone3
+	p.Touched:Connect(function(hit)
+		local pl = Players:GetPlayerFromCharacter(hit.Parent) if not pl then return end
+		local root = pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") if not root then return end
+		if (root.Position - p.Position).Magnitude > 6 then return end
+		if not pl:FindFirstChild("_Forging") then return end
+		if not pl:FindFirstChild("HasPathKey") then local v = Instance.new("BoolValue", pl) v.Name = "HasPathKey" v.Value = true end
+		local s = pl:FindFirstChild("PathKeyShape") or Instance.new("StringValue", pl) s.Name = "PathKeyShape" s.Value = c.name
+		if c.name == "Courage" then if not pl:FindFirstChild("Trait_Courage") then local t = Instance.new("BoolValue", pl) t.Name = "Trait_Courage" t.Value = true end end
+		pcall(function() pl._Forging:Destroy() end)
+		savePlayer(pl)
+		pcall(function() dialogEvent:FireClient(pl, {speaker = "Solari", lines = {"You forged your key: "..c.name..".", "Identity gates will answer now."}}) end)
+	end)
+end
+
+-- Gates
+local gates = {
+	{ name = "Gate_Courage", offset = Vector3.new(-16,0,-12), need = "Courage", color = BrickColor.new("Bright orange") },
+	{ name = "Gate_Wonder", offset = Vector3.new(0,0,18), need = "Wonder", color = BrickColor.new("Pastel blue-green") },
+	{ name = "Gate_Intuition", offset = Vector3.new(16,0,-12), need = "Intuition", color = BrickColor.new("Mint") },
+}
+for _,g in ipairs(gates) do
+	local gate = Zone3:FindFirstChild(g.name) or Instance.new("Part") gate.Name = g.name gate.Size = Vector3.new(6,8,1)
+	gate.Position = groundAt(forge.Position + g.offset) gate.Anchored = true gate.BrickColor = g.color gate.Parent = Zone3
+	local pp = gate:FindFirstChildOfClass("ProximityPrompt") or Instance.new("ProximityPrompt", gate)
+	pp.ActionText = "Open" pp.ObjectText = g.name pp.HoldDuration = 0.3 pp.MaxActivationDistance = 8
+	pp.Triggered:Connect(function(player)
+		local s = player:FindFirstChild("PathKeyShape")
+		if s and tostring(s.Value) == g.need then gate.CanCollide = false gate.Transparency = 0.6 pcall(function() dialogEvent:FireClient(player, {speaker = "Solari", lines = {"The gate recognizes your key.", "Go on."}}) end) else pcall(function() dialogEvent:FireClient(player, {speaker = "Solari", lines = {"It doesn’t resonate yet.", "Forge your key first."}}) end) end
+	end)
+end
+]]
+ensureServerScript("Zone3Content", ZONE3_SOURCE)
+
+-- Zone 3 NPC spawner (Trace, Skylar, Donna)
+local function ensureZ3NPCs()
+	local base = Vector3.new(0,5,220)
+	local Zone3 = workspace:FindFirstChild("Zone3") or workspace
+	local npcFolder = ReplicatedStorage:FindFirstChild("NPCModels")
+	local function spawn(name, offset, lines)
+		if Zone3:FindFirstChild(name) then return end
+		local pos = base + offset
+		local template = npcFolder and npcFolder:FindFirstChild(name)
+		local model
+		if template and template:IsA("Model") then
+			model = template:Clone() model.Name = name model.Parent = Zone3 pcall(function() model:PivotTo(CFrame.new(pos)) end)
+		else
+			local p = Instance.new("Part") p.Name = name p.Size = Vector3.new(2,5,2) p.Position = pos p.Anchored = true p.BrickColor = BrickColor.new("Bright orange") p.Parent = Zone3
+			model = p
+		end
+		local ppParent = (model:IsA("Model") and (model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart)) or model
+		local pp = Instance.new("ProximityPrompt", ppParent) pp.ActionText = "Talk" pp.ObjectText = name pp.HoldDuration = 0.3 pp.MaxActivationDistance = 10
+		pp.Triggered:Connect(function(player)
+			pcall(function() ReplicatedStorage:WaitForChild("DialogEvent"):FireClient(player, {speaker = name, lines = lines or {"Hey."}}) end)
+		end)
+	end
+	spawn("Trace", Vector3.new(-8,0,-6), {
+		"The metal’s alive, kinda. It melts to your choices.",
+		"Mine accidentally unlocked a room full of raccoons. Long story.",
+	})
+	spawn("Skylar", Vector3.new(8,0,-6), {
+		"Mine started tiny. Just a stub. But every choice shaped it stronger.",
+		"You’ll build yours from what you decide. No one else can shape it for you.",
+	})
+	spawn("Donna", Vector3.new(0,0,-10), {
+		"Even a small key can unlock a new future.",
+		"It’s not about picking a perfect version of you… just an honest one.",
+	})
+end
+ensureZ3NPCs()
 
 -- Client: SparkClient (MVP, trimmed but feature-complete)
 local SPARK_CLIENT_SOURCE = [[
@@ -733,4 +965,5 @@ end
 ensureLocalScript("UIWireUp", UI_WIREUP_SOURCE)
 
 print("MVPInstaller completed: ReplicatedStorage, ServerScriptService, StarterPlayerScripts, and Workspace are set up.")
+print("NPCs: Solari, Donna, Shauna, Heidi, Alex, Alexis, Tripp, Trace, Emerson spawned (fallback parts if models missing)")
 

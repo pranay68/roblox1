@@ -7,6 +7,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local CollectionService = game:GetService("CollectionService")
+local Zone1Dialog = nil pcall(function() Zone1Dialog = require(ReplicatedStorage:WaitForChild("Zone1Dialog")) end)
 
 -- try to load assets from ReplicatedStorage (optional)
 local assets = {}
@@ -173,7 +174,7 @@ local function playLocalSound(soundId, loop)
 end
 
 -- Cinematic NPC lines
-local npcLines = {
+local npcLines = Zone1Dialog and Zone1Dialog.openingCinematic or {
     {name="Alex", text="I notice it first."},
     {name="Alexis", text="Heh, it's glowing — dramatic, right?"},
     {name="Solari", text="It's been here, waiting."},
@@ -310,6 +311,18 @@ end)
 local function playCinematicOnce()
     local camera = workspace.CurrentCamera
     if not camera then return end
+    local gui = playerGui:FindFirstChild("IgnisiaUI")
+    local ctrl = gui and gui:FindFirstChild("_DialogController")
+    -- If cinematic controller exists (from installer/UIWireUp), use it for letterbox + typewriter
+    if ctrl and ctrl:IsA("BindableFunction") then
+        local startCF = CFrame.new(spark.Position + Vector3.new(0, 30, -60), spark.Position)
+        local endCF = CFrame.new(spark.Position + Vector3.new(0, 8, -18), spark.Position)
+        local lines = {}
+        for _,e in ipairs(npcLines) do table.insert(lines, (e.name ~= "" and (e.name..": ") or "")..tostring(e.text)) end
+        ctrl:Invoke({ speaker = "", lines = lines, npcModel = nil, cameraPath = {startCF, endCF, 4.0}, perLine = nil })
+        return
+    end
+    -- Fallback: simple pan and text label
     camera.CameraType = Enum.CameraType.Scriptable
     local startCF = CFrame.new(spark.Position + Vector3.new(0, 30, -60), spark.Position)
     local endCF = CFrame.new(spark.Position + Vector3.new(0, 8, -18), spark.Position)
@@ -321,25 +334,7 @@ local function playCinematicOnce()
         camera.CFrame = startCF:Lerp(endCF, alpha)
         RunService.RenderStepped:Wait()
     end
-
     for _,entry in ipairs(npcLines) do
-        -- set portrait if available from assets
-        local portraitImg = nil
-        pcall(function()
-            local a = ReplicatedStorage:FindFirstChild("IgnisiaAssets")
-            if a then
-                local ok, m = pcall(require, a)
-                if ok and type(m) == "table" and m.npcDecals and m.npcDecals[entry.name] and m.npcDecals[entry.name] ~= "" then
-                    portraitImg = m.npcDecals[entry.name]
-                end
-            end
-        end)
-        if portraitImg and portrait then
-            portrait.Image = portraitImg
-            portrait.Visible = true
-        else
-            if portrait then portrait.Visible = false end
-        end
         dialogLabel.Text = entry.name..": "..entry.text
         dialogLabel.Visible = true
         wait(2.2)
@@ -514,7 +509,14 @@ local function wireReflectionButtons()
     local c1 = reflectionGui:WaitForChild("Choice1")
     local c2 = reflectionGui:WaitForChild("Choice2")
     local c3 = reflectionGui:WaitForChild("Choice3")
-
+    local choices = (Zone1Dialog and Zone1Dialog.reflectionChoices) or {
+        "🧡 Like something I’d been waiting for",
+        "🔥 Like I’m not afraid of my fire",
+        "🌱 Like maybe I’m not broken",
+    }
+    c1.Text = choices[1] or c1.Text
+    c2.Text = choices[2] or c2.Text
+    c3.Text = choices[3] or c3.Text
     local function choose(text)
         reflectionGui:SetAttribute("ChosenReflection", text)
         reflectionGui.Visible = false
@@ -522,10 +524,9 @@ local function wireReflectionButtons()
         dialogLabel.Visible = true
         delay(1.4, function() dialogLabel.Visible = false end)
     end
-
-    c1.MouseButton1Click:Connect(function() choose("🧡 Like something I’d been waiting for") end)
-    c2.MouseButton1Click:Connect(function() choose("🔥 Like I’m not afraid of my fire") end)
-    c3.MouseButton1Click:Connect(function() choose("🌱 Like maybe I’m not broken") end)
+    c1.MouseButton1Click:Connect(function() choose(c1.Text) end)
+    c2.MouseButton1Click:Connect(function() choose(c2.Text) end)
+    c3.MouseButton1Click:Connect(function() choose(c3.Text) end)
 end
 
 -- Effect listener (server broadcast)

@@ -83,6 +83,30 @@ local function savePlayerData(player)
     if mirror and mirror.Value == true then
         payload.MirrorSolved = true
     end
+    local tv = player:FindFirstChild("Trait_Vision")
+    if tv and tv.Value == true then
+        payload.Trait_Vision = true
+    end
+    local pk = player:FindFirstChild("HasPathKey")
+    if pk and pk.Value == true then
+        payload.HasPathKey = true
+    end
+    local shape = player:FindFirstChild("PathKeyShape")
+    if shape and tostring(shape.Value) ~= "" then
+        payload.PathKeyShape = tostring(shape.Value)
+    end
+    local tc = player:FindFirstChild("Trait_Courage")
+    if tc and tc.Value == true then
+        payload.Trait_Courage = true
+    end
+    local z2r = player:FindFirstChild("Zone2Reflection")
+    if z2r and tostring(z2r.Value) ~= "" then
+        payload.Zone2Reflection = tostring(z2r.Value)
+    end
+    local z3r = player:FindFirstChild("Zone3Reflection")
+    if z3r and tostring(z3r.Value) ~= "" then
+        payload.Zone3Reflection = tostring(z3r.Value)
+    end
     -- Queue saves to avoid bursty writes: add to pending and let flush loop handle retries
     pendingWrites[key] = payload
 end
@@ -133,6 +157,24 @@ Players.PlayerAdded:Connect(function(player)
             end
             if data.MirrorSolved then
                 local bv = Instance.new("BoolValue") bv.Name = "MirrorSolved" bv.Value = true bv.Parent = player
+            end
+            if data.Trait_Vision then
+                local tv = Instance.new("BoolValue") tv.Name = "Trait_Vision" tv.Value = true tv.Parent = player
+            end
+            if data.HasPathKey then
+                local v = Instance.new("BoolValue") v.Name = "HasPathKey" v.Value = true v.Parent = player
+            end
+            if data.PathKeyShape then
+                local s = Instance.new("StringValue") s.Name = "PathKeyShape" s.Value = tostring(data.PathKeyShape) s.Parent = player
+            end
+            if data.Trait_Courage then
+                local c = Instance.new("BoolValue") c.Name = "Trait_Courage" c.Value = true c.Parent = player
+            end
+            if data.Zone2Reflection then
+                local s = Instance.new("StringValue") s.Name = "Zone2Reflection" s.Value = tostring(data.Zone2Reflection) s.Parent = player
+            end
+            if data.Zone3Reflection then
+                local s3 = Instance.new("StringValue") s3.Name = "Zone3Reflection" s3.Value = tostring(data.Zone3Reflection) s3.Parent = player
             end
         end
     end)
